@@ -1,18 +1,22 @@
-// analyzer.js
+/* ═══════════════════════════════════════════════════════════════
+   BUMBLE FOTO — Image Analyzer
+   Quality detection (blur, exposure) and similarity (dHash, histogram).
+   Runs entirely on a hidden canvas in the browser.
+   ═══════════════════════════════════════════════════════════════ */
 
 const ImageAnalyzer = {
-  // Configuráveis - os valores ideais podem variar conforme a câmara
-  BLUR_THRESHOLD: 80, // Variância laplaciana abaixo disto = Desfocada
-  UNDER_EXPOSED_THRESHOLD: 50, // Luminância média abaixo disto = Subexposta
-  OVER_EXPOSED_THRESHOLD: 215, // Luminância média acima disto = Sobrexposta
-  SAMPLE_SIZE: 500, // Tamanho máximo da amostra no canvas (maior para preservar arestas)
+  // Fallback defaults (overridden by window.AppSettings from localStorage)
+  BLUR_THRESHOLD: 80,
+  UNDER_EXPOSED_THRESHOLD: 50,
+  OVER_EXPOSED_THRESHOLD: 215,
+  SAMPLE_SIZE: 500,
 
   /**
    * Avalia a qualidade de um elemento <img> usando algoritmos matemáticos simples.
    * Retorna uma promise que resolve num array de tags.
    */
   async analyze(imgElement) {
-    if (!imgElement || !imgElement.complete || imgElement.naturalWidth === 0) {
+    if (!imgElement || !imgElement.complete || imgElement.naturalWidth === 0 || imgElement.naturalHeight === 0) {
       return [];
     }
 
@@ -29,10 +33,10 @@ const ImageAnalyzer = {
     
     if (width > maxDim || height > maxDim) {
       if (width > height) {
-        height = Math.round((height * maxDim) / width);
+        height = Math.max(1, Math.round((height * maxDim) / width));
         width = maxDim;
       } else {
-        width = Math.round((width * maxDim) / height);
+        width = Math.max(1, Math.round((width * maxDim) / height));
         height = maxDim;
       }
     }

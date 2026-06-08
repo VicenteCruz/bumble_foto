@@ -30,12 +30,18 @@ const state = {
   dragDeltaX: 0,
   currentObjectUrl: null,     // For memory cleanup
   nextObjectUrl: null,
+  prevObjectUrl: null,
   selectedPhotos: new Set(),  // Set of names for group modal multi-select
   sideBySide: false,
   galleryType: null,
   gallerySelected: new Set(),
   activeSavedGroupHandle: null,
   activeSavedGroupName: null,
+  
+  // Stats
+  allStatsData: [],
+  statsFilters: { date: null, camera: null, bounds: null },
+  _ignoreMapEvents: false,
 };
 
 // ─── Settings ──────────────────────────────────────────────────
@@ -49,19 +55,22 @@ const defaultSettings = {
   brightThreshold: 215
 };
 
-window.AppSettings = { ...defaultSettings };
+state.settings = { ...defaultSettings };
 
 // Load from LocalStorage
 try {
   const saved = localStorage.getItem('bumblefoto_settings');
   if (saved) {
     const parsed = JSON.parse(saved);
-    window.AppSettings = { ...defaultSettings, ...parsed };
+    state.settings = { ...defaultSettings, ...parsed };
   }
 } catch (e) {}
 
+// Keep backward compat for analyzer.js which reads window.AppSettings
+window.AppSettings = state.settings;
+
 function saveSettings() {
-  localStorage.setItem('bumblefoto_settings', JSON.stringify(window.AppSettings));
+  localStorage.setItem('bumblefoto_settings', JSON.stringify(state.settings));
 }
 
 // ─── DOM Helpers ───────────────────────────────────────────────
@@ -113,6 +122,8 @@ async function pickFolder() {
     $('selected-folder').textContent = '📁 ' + state.dirHandle.name;
     $('selected-folder').classList.add('visible');
     $('start-btn').style.display = '';
+    const folderStatsBtn = $('folder-stats-btn');
+    if (folderStatsBtn) folderStatsBtn.style.display = '';
     $('folder-error').textContent = '';
   } catch (err) {
     // User cancelled the dialog — ignore AbortError
@@ -247,6 +258,34 @@ async function restoreFile(filename, sourceHandle) {
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Compare two images for structural and color similarity.
+ * Returns { dHashSim, histSim, isSimilar }
+ */
+async function computeSimilarity(img1, img2) {
+  let dHashSim = 0;
+  let histSim = 0;
+
+  if (typeof ImageAnalyzer === 'undefined') return { dHashSim, histSim, isSimilar: false };
+
+  if (ImageAnalyzer.computeDHash) {
+    const dHash1 = await ImageAnalyzer.computeDHash(img1);
+    const dHash2 = await ImageAnalyzer.computeDHash(img2);
+    if (dHash1 && dHash2) dHashSim = ImageAnalyzer.compareHashes(dHash1, dHash2);
+  }
+
+  if (ImageAnalyzer.computeColorHistogram) {
+    const hist1 = await ImageAnalyzer.computeColorHistogram(img1);
+    const hist2 = await ImageAnalyzer.computeColorHistogram(img2);
+    if (hist1 && hist2) histSim = ImageAnalyzer.compareHistograms(hist1, hist2);
+  }
+
+  const settings = state.settings || window.AppSettings;
+  const isSimilar = dHashSim >= settings.dHashSim || histSim >= settings.histSim;
+
+  return { dHashSim, histSim, isSimilar };
+}
+
+/**
  * Render the current photo and update all UI elements.
  */
 async function renderPhoto() {
@@ -303,28 +342,15 @@ async function renderPhoto() {
       }
 
       // Grouping similarity detection
-      if (state.isGrouping && state.group.length > 0 && typeof ImageAnalyzer !== 'undefined') {
+      if (state.isGrouping && state.group.length > 0) {
         try {
           const prevEntry = state.group[state.group.length - 1];
           const prevUrl = await createObjectUrl(prevEntry.handle);
           const prevImg = new Image();
           
           prevImg.onload = async () => {
-            let dHashSim = 0;
-            let histSim = 0;
-            
-            if (ImageAnalyzer.computeDHash) {
-              const dHash1 = await ImageAnalyzer.computeDHash(prevImg);
-              const dHash2 = await ImageAnalyzer.computeDHash(img);
-              if (dHash1 && dHash2) dHashSim = ImageAnalyzer.compareHashes(dHash1, dHash2);
-            }
-            if (ImageAnalyzer.computeColorHistogram) {
-              const hist1 = await ImageAnalyzer.computeColorHistogram(prevImg);
-              const hist2 = await ImageAnalyzer.computeColorHistogram(img);
-              if (hist1 && hist2) histSim = ImageAnalyzer.compareHistograms(hist1, hist2);
-            }
-            
-            if (dHashSim >= window.AppSettings.dHashSim || histSim >= window.AppSettings.histSim) {
+            const { isSimilar } = await computeSimilarity(prevImg, img);
+            if (isSimilar) {
               $('photo-card').classList.add('current-group-alert');
             }
             URL.revokeObjectURL(prevUrl);
@@ -426,30 +452,14 @@ async function renderPreviews() {
 
         // Detect similarity once next image loads
         nextImg.onload = async () => {
-          if (typeof ImageAnalyzer !== 'undefined') {
-            try {
-              const currentImg = $('current-photo');
-              let dHashSim = 0;
-              let histSim = 0;
-
-              if (ImageAnalyzer.computeDHash) {
-                const dHash1 = await ImageAnalyzer.computeDHash(currentImg);
-                const dHash2 = await ImageAnalyzer.computeDHash(nextImg);
-                if (dHash1 && dHash2) dHashSim = ImageAnalyzer.compareHashes(dHash1, dHash2);
-              }
-
-              if (ImageAnalyzer.computeColorHistogram) {
-                const hist1 = await ImageAnalyzer.computeColorHistogram(currentImg);
-                const hist2 = await ImageAnalyzer.computeColorHistogram(nextImg);
-                if (hist1 && hist2) histSim = ImageAnalyzer.compareHistograms(hist1, hist2);
-              }
-              
-              if (dHashSim >= window.AppSettings.dHashSim || histSim >= window.AppSettings.histSim) {
-                preview.classList.add('similar-alert');
-                if (btnGroup) btnGroup.classList.add('similar-pulse');
-              }
-            } catch (e) {}
-          }
+          try {
+            const currentImg = $('current-photo');
+            const { isSimilar } = await computeSimilarity(currentImg, nextImg);
+            if (isSimilar) {
+              preview.classList.add('similar-alert');
+              if (btnGroup) btnGroup.classList.add('similar-pulse');
+            }
+          } catch (e) {}
         };
       } catch {
         preview.classList.remove('visible');
@@ -958,7 +968,7 @@ async function cancelGroupSelection() {
  * Revoke object URLs created for the group modal to free memory.
  */
 function cleanupGroupModal() {
-  const imgs = $('group-grid').querySelectorAll('div[data-object-url]');
+  const imgs = $('group-grid').querySelectorAll('img[data-object-url]');
   imgs.forEach((img) => URL.revokeObjectURL(img.dataset.objectUrl));
 }
 
@@ -1217,7 +1227,7 @@ async function showGallery(type) {
 }
 
 function cleanupGalleryModal() {
-  const imgs = $('gallery-grid').querySelectorAll('div[data-object-url]');
+  const imgs = $('gallery-grid').querySelectorAll('img[data-object-url]');
   imgs.forEach((img) => URL.revokeObjectURL(img.dataset.objectUrl));
 }
 
@@ -1559,8 +1569,7 @@ function disableSideBySide() {
   if (!state.sideBySide) return;
   state.sideBySide = false;
   $('photo-stage').classList.remove('side-by-side-mode');
-  $('next-preview').style.display = '';
-  if ($('prev-preview')) $('prev-preview').style.display = '';
+  if (state._updatePreviewsLayout) state._updatePreviewsLayout();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1568,20 +1577,52 @@ function disableSideBySide() {
 // ═══════════════════════════════════════════════════════════════
 
 function setupEventListeners() {
-  // Dynamic resize of next-preview to avoid overlap
-  const photoCardObserver = new ResizeObserver(entries => {
-    for (let entry of entries) {
-      const rect = entry.target.getBoundingClientRect();
-      const rightSpace = window.innerWidth - rect.right;
-      
-      const preview = $('next-preview');
-      let previewMaxWidth = rightSpace - 24; // 12px gap from photo, 12px gap from right edge
-      previewMaxWidth = Math.max(180, Math.min(previewMaxWidth, 500));
-      
-      preview.style.maxWidth = `${previewMaxWidth}px`;
+  // Dynamic resize of next-preview and prev-preview to avoid overlap
+  const updatePreviewsLayout = () => {
+    const currentPhoto = $('current-photo');
+    if (!currentPhoto) return;
+    
+    const offsetWidth = currentPhoto.offsetWidth;
+    // Space available on each side when photo is centered
+    const availableSpace = (window.innerWidth - offsetWidth) / 2;
+    
+    const nextPreview = $('next-preview');
+    if (nextPreview) {
+      if (state.sideBySide) {
+        nextPreview.style.display = 'none';
+      } else {
+        let previewMaxWidth = availableSpace - 24; // 12px gap from photo, 12px gap from edge
+        if (previewMaxWidth < 40) {
+          nextPreview.style.display = 'none';
+        } else {
+          nextPreview.style.display = '';
+          previewMaxWidth = Math.max(0, Math.min(previewMaxWidth, 500));
+          nextPreview.style.maxWidth = `${previewMaxWidth}px`;
+        }
+      }
     }
-  });
+    
+    const prevPreview = $('prev-preview');
+    if (prevPreview) {
+      if (state.sideBySide) {
+        prevPreview.style.display = 'none';
+      } else {
+        let previewMaxWidth = availableSpace - 24;
+        if (previewMaxWidth < 40) {
+          prevPreview.style.display = 'none';
+        } else {
+          prevPreview.style.display = '';
+          previewMaxWidth = Math.max(0, Math.min(previewMaxWidth, 500));
+          prevPreview.style.maxWidth = `${previewMaxWidth}px`;
+        }
+      }
+    }
+  };
+
+  const photoCardObserver = new ResizeObserver(() => updatePreviewsLayout());
   photoCardObserver.observe($('current-photo'));
+  window.addEventListener('resize', updatePreviewsLayout);
+  state._updatePreviewsLayout = updatePreviewsLayout;
 
   // Folder screen
   $('pick-folder-btn').addEventListener('click', pickFolder);
@@ -1634,6 +1675,18 @@ function setupEventListeners() {
     }
   });
 
+  // Modal close buttons (moved from inline onclick in HTML)
+  document.querySelectorAll('.modal-close-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const modal = btn.closest('#gallery-modal, #groups-list-modal');
+      if (modal) {
+        if (modal.id === 'gallery-modal') cleanupGalleryModal();
+        if (modal.id === 'groups-list-modal') cleanupGroupsListModal();
+        modal.classList.remove('active');
+      }
+    });
+  });
+
   // Fullscreen viewer — click to close (only if clicking outside the image or if it's not zoomed)
   $('fullscreen-viewer').addEventListener('click', (e) => {
     if (e.target !== $('fullscreen-photo') || !$('fullscreen-photo').classList.contains('zoom-grabbable')) {
@@ -1656,20 +1709,20 @@ function setupEventListeners() {
   // Settings Modal
   $('btn-settings').addEventListener('click', () => {
     // Populate sliders with current settings
-    $('set-dhash').value = window.AppSettings.dHashSim;
-    $('val-dhash').textContent = window.AppSettings.dHashSim + '%';
+    $('set-dhash').value = state.settings.dHashSim;
+    $('val-dhash').textContent = state.settings.dHashSim + '%';
     
-    $('set-hist').value = window.AppSettings.histSim;
-    $('val-hist').textContent = window.AppSettings.histSim + '%';
+    $('set-hist').value = state.settings.histSim;
+    $('val-hist').textContent = state.settings.histSim + '%';
 
-    $('set-blur').value = window.AppSettings.blurThreshold;
-    $('val-blur').textContent = window.AppSettings.blurThreshold;
+    $('set-blur').value = state.settings.blurThreshold;
+    $('val-blur').textContent = state.settings.blurThreshold;
 
-    $('set-dark').value = window.AppSettings.darkThreshold;
-    $('val-dark').textContent = window.AppSettings.darkThreshold;
+    $('set-dark').value = state.settings.darkThreshold;
+    $('val-dark').textContent = state.settings.darkThreshold;
 
-    $('set-bright').value = window.AppSettings.brightThreshold;
-    $('val-bright').textContent = window.AppSettings.brightThreshold;
+    $('set-bright').value = state.settings.brightThreshold;
+    $('val-bright').textContent = state.settings.brightThreshold;
 
     $('settings-modal').classList.add('active');
   });
@@ -1688,15 +1741,15 @@ function setupEventListeners() {
   const updateSetting = (id, key, suffix = '') => {
     $(id).addEventListener('input', (e) => {
       const val = parseInt(e.target.value, 10);
-      window.AppSettings[key] = val;
+      state.settings[key] = val;
       $('val-' + id.replace('set-', '')).textContent = val + suffix;
     });
 
     $(id).addEventListener('change', () => {
       saveSettings();
       // Re-evaluate current photo
-      if (state.screen === 'viewer') {
-        renderPhoto(state.currentIndex, false); 
+      if (state.screen === 'swipe') {
+        renderPhoto();
         renderPreviews();
       }
     });
@@ -1710,6 +1763,16 @@ function setupEventListeners() {
 
   // Done screen — restart
   $('restart-btn').addEventListener('click', () => showScreen('folder'));
+  
+  // Stats
+  const showStats = () => loadStatistics();
+  $('btn-stats').addEventListener('click', showStats);
+  const folderStatsBtn = $('folder-stats-btn');
+  if (folderStatsBtn) folderStatsBtn.addEventListener('click', showStats);
+  if ($('done-stats-btn')) $('done-stats-btn').addEventListener('click', showStats);
+  $('stats-back-btn').addEventListener('click', () => {
+    $('stats-screen').classList.remove('active');
+  });
 }
 
 function setupFullscreenZoomPan(imgElement) {
@@ -1773,4 +1836,338 @@ function setupFullscreenZoomPan(imgElement) {
     imgElement.classList.remove('zoom-grabbable', 'zoom-grabbing');
     updateTransform();
   };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATISTICS & HEATMAP
+// ═══════════════════════════════════════════════════════════════
+
+async function loadStatistics() {
+  if (!state.dirHandle) {
+    showToast('Seleciona uma pasta primeiro para ver as estatísticas.', 'error');
+    return;
+  }
+  
+  $('stats-screen').classList.add('active');
+  $('stats-loading').classList.remove('hidden');
+  $('stats-dashboard').classList.remove('hidden'); // Show dashboard immediately
+  
+  $('stats-loading-text').textContent = 'A procurar fotografias na pasta...';
+  
+  // Clear previous stats
+  state.allStatsData = [];
+  state.statsFilters = { date: null, camera: null, bounds: null };
+
+  $('stat-total-photos').textContent = '0';
+  $('stat-gps-photos').textContent = '0';
+  renderHeatmap([], false);
+  
+  // Important: leaflet needs invalidateSize after container becomes visible
+  if (state.leafletMap) {
+    setTimeout(() => {
+      state.leafletMap.invalidateSize();
+    }, 150);
+  }
+
+  const allHandles = [];
+
+  // Pass 1: Collect all files quickly
+  async function collectFiles(dirHandle) {
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (name.startsWith('.')) continue;
+      if (handle.kind === 'directory') {
+        await collectFiles(handle);
+      } else if (handle.kind === 'file') {
+        const ext = name.split('.').pop().toLowerCase();
+        if (IMAGE_EXTENSIONS.has(ext)) {
+          allHandles.push(handle);
+        }
+      }
+    }
+  }
+
+  try {
+    await collectFiles(state.dirHandle);
+  } catch (err) {
+    console.error('Erro ao procurar ficheiros', err);
+  }
+
+  const totalFiles = allHandles.length;
+  if (totalFiles === 0) {
+    $('stats-loading').classList.add('hidden');
+    return;
+  }
+
+  let processedCount = 0;
+  let photosWithGPS = 0;
+  const gpsPoints = [];
+  
+  // New Chart Data
+  const timelineData = {}; // "YYYY-MM": count
+  const camerasData = {}; // "Make Model": count
+
+  // Initial charts draw (empty)
+  renderCharts({}, {});
+
+  // Pass 2: Process files with progress
+  for (const handle of allHandles) {
+    processedCount++;
+    let photoData = { lat: undefined, lng: undefined, dateKey: null, camName: null };
+    
+    // Update UI periodically to not block the thread too much
+    if (processedCount % 5 === 0 || processedCount === totalFiles) {
+      $('stats-loading-text').textContent = `A extrair metadados... (${processedCount} / ${totalFiles})`;
+      $('stat-total-photos').textContent = processedCount;
+      $('stat-gps-photos').textContent = photosWithGPS;
+      
+      // Update heatmap incrementally
+      if (state.heatLayer && gpsPoints.length > 0) {
+        state.heatLayer.setLatLngs(gpsPoints);
+      }
+    }
+
+    try {
+      const file = await handle.getFile();
+      // Extract GPS and other EXIF metadata
+      const metadata = await exifr.parse(file, { tiff: true, exif: true, gps: true });
+      
+      if (metadata) {
+        // GPS
+        if (typeof metadata.latitude === 'number' && typeof metadata.longitude === 'number') {
+          photoData.lat = metadata.latitude;
+          photoData.lng = metadata.longitude;
+        }
+        
+        // Timeline
+        if (metadata.DateTimeOriginal) {
+          const date = new Date(metadata.DateTimeOriginal);
+          if (!isNaN(date.getTime())) {
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            photoData.dateKey = `${year}-${month}-${day}`;
+          }
+        }
+        
+        if (metadata.Make || metadata.Model) {
+          let make = (metadata.Make || '').trim();
+          let model = (metadata.Model || '').trim();
+          if (make.toLowerCase() === 'apple') make = 'Apple';
+          let camName = model;
+          if (make && !model.toLowerCase().includes(make.toLowerCase())) {
+            camName = `${make} ${model}`;
+          }
+          photoData.camName = camName.trim() || 'Desconhecida';
+        }
+      }
+    } catch (e) {}
+
+    state.allStatsData.push(photoData);
+    
+    // UI Feedback
+    if (processedCount % 10 === 0 || processedCount === totalFiles) {
+      $('stats-loading-text').textContent = `A extrair metadados... (${processedCount} / ${totalFiles})`;
+      applyStatsFilters(false);
+    }
+  }
+
+  // Final Fit Bounds
+  $('stats-loading').classList.add('hidden');
+  applyStatsFilters(true);
+  setTimeout(() => { state._ignoreMapEvents = false; }, 800);
+}
+
+// ─── CROSS FILTERING ENGINE ───
+
+function applyStatsFilters(fitMapBounds = false) {
+  let photosWithGPS = 0;
+  let timelineData = {}; 
+  let camerasData = {}; 
+  const gpsPoints = [];
+
+  // Filter the full dataset
+  let filteredData = state.allStatsData.filter(d => {
+    if (state.statsFilters.date && d.dateKey !== state.statsFilters.date) return false;
+    if (state.statsFilters.camera && d.camName !== state.statsFilters.camera) return false;
+    if (state.statsFilters.bounds && d.lat !== undefined && d.lng !== undefined) {
+      const p = L.latLng(d.lat, d.lng);
+      if (!state.statsFilters.bounds.contains(p)) return false;
+    }
+    return true;
+  });
+
+  // Aggregate the filtered dataset
+  filteredData.forEach(d => {
+    if (d.lat !== undefined && d.lng !== undefined) {
+      gpsPoints.push([d.lat, d.lng, 1]);
+      photosWithGPS++;
+    }
+    if (d.dateKey) {
+      timelineData[d.dateKey] = (timelineData[d.dateKey] || 0) + 1;
+    }
+    if (d.camName) {
+      camerasData[d.camName] = (camerasData[d.camName] || 0) + 1;
+    }
+  });
+
+  // Update Text UI
+  $('stat-total-photos').textContent = filteredData.length;
+  $('stat-gps-photos').textContent = photosWithGPS;
+
+  // Render Sub-components
+  renderHeatmap(gpsPoints, fitMapBounds);
+  renderCharts(timelineData, camerasData);
+}
+
+// ─── Chart Setup ───
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = 'Inter, sans-serif';
+
+function renderCharts(timelineData, camerasData) {
+  // 1. Timeline Chart
+  const timelineCtx = $('timeline-chart').getContext('2d');
+  
+  // Sort timeline keys chronologically
+  const timelineKeys = Object.keys(timelineData).sort();
+  const timelineValues = timelineKeys.map(k => timelineData[k]);
+  
+  // Format labels nicely (e.g. "2023-01-15" -> "15 Jan 2023")
+  const formatDay = (str) => {
+    const [y, m, d] = str.split('-');
+    const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+    return date.toLocaleString('pt-PT', { day: 'numeric', month: 'short', year: '2-digit' });
+  };
+  const timelineLabels = timelineKeys.map(formatDay);
+
+  if (state.timelineChart) {
+    state.timelineChartKeys = timelineKeys;
+    state.timelineChart.data.labels = timelineLabels;
+    state.timelineChart.data.datasets[0].data = timelineValues;
+    state.timelineChart.update();
+  } else {
+    state.timelineChartKeys = timelineKeys;
+    // Gradient for the line chart fill
+    const gradient = timelineCtx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(129, 140, 248, 0.5)'); // #818cf8
+    gradient.addColorStop(1, 'rgba(129, 140, 248, 0.0)');
+
+    state.timelineChart = new Chart(timelineCtx, {
+      type: 'line',
+      data: {
+        labels: timelineLabels,
+        datasets: [{
+          label: 'Fotografias',
+          data: timelineValues,
+          borderColor: '#818cf8',
+          backgroundColor: gradient,
+          borderWidth: 2,
+          pointBackgroundColor: '#a78bfa',
+          pointBorderColor: '#fff',
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          fill: true,
+          tension: 0.3 // Smooth curves
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(255, 255, 255, 0.05)' }
+          },
+          x: {
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  // 2. Cameras Chart
+  const camerasCtx = $('cameras-chart').getContext('2d');
+  
+  // Sort cameras by count descending
+  const sortedCameras = Object.entries(camerasData).sort((a, b) => b[1] - a[1]);
+  // Top 5 and group the rest as "Outras"
+  const topCameras = sortedCameras.slice(0, 5);
+  const otherCameras = sortedCameras.slice(5).reduce((sum, [_, count]) => sum + count, 0);
+  if (otherCameras > 0) {
+    topCameras.push(['Outras', otherCameras]);
+  }
+  
+  const cameraLabels = topCameras.map(c => c[0]);
+  const cameraValues = topCameras.map(c => c[1]);
+
+  if (state.camerasChart) {
+    state.camerasChart.data.labels = cameraLabels;
+    state.camerasChart.data.datasets[0].data = cameraValues;
+    state.camerasChart.update();
+  } else {
+    state.camerasChart = new Chart(camerasCtx, {
+      type: 'doughnut',
+      data: {
+        labels: cameraLabels,
+        datasets: [{
+          data: cameraValues,
+          backgroundColor: [
+            '#818cf8', '#a78bfa', '#f472b6', '#38bdf8', '#34d399', '#94a3b8'
+          ],
+          borderWidth: 0,
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: { color: '#e2e8f0', padding: 20 }
+          }
+        },
+        cutout: '65%'
+      }
+    });
+  }
+}
+
+function renderHeatmap(gpsPoints, fitMapBounds = false) {
+  if (!state.leafletMap) {
+    // Initialize map
+    state.leafletMap = L.map('heatmap-container').setView([20, 0], 2);
+    
+    // Add base tile layer (CartoDB Positron - Light and minimalist)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }).addTo(state.leafletMap);
+  }
+
+  // Create heat layer if not exists
+  if (!state.heatLayer) {
+    state.heatLayer = L.heatLayer([], {
+      radius: 25,
+      blur: 15,
+      maxZoom: 10,
+      gradient: {0.2: '#e2e8f0', 0.5: '#c4b5fd', 0.8: '#a78bfa', 1.0: '#818cf8'} // Soft, minimalist purple/indigo gradient
+    }).addTo(state.leafletMap);
+  }
+  
+  state.heatLayer.setLatLngs(gpsPoints);
+
+  if (fitMapBounds && gpsPoints.length > 0) {
+    const bounds = L.latLngBounds(gpsPoints.map(p => [p[0], p[1]]));
+    state._ignoreMapEvents = true;
+    state.leafletMap.fitBounds(bounds, { padding: [50, 50] });
+    setTimeout(() => { state._ignoreMapEvents = false; }, 800);
+  } else if (fitMapBounds && gpsPoints.length === 0) {
+    state._ignoreMapEvents = true;
+    state.leafletMap.setView([20, 0], 2);
+    setTimeout(() => { state._ignoreMapEvents = false; }, 800);
+  }
 }

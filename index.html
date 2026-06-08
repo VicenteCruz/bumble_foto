@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -51,6 +52,12 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14M12 5l7 7-7 7"/>
             </svg>
+          </button>
+          <button id="folder-stats-btn" class="btn-secondary btn-folder-stats" style="display:none">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 20V10M12 20V4M6 20v-6"/>
+            </svg>
+            <span>Ver Estatísticas</span>
           </button>
           <div id="folder-error" class="folder-error"></div>
           <div id="browser-warning" class="browser-warning">
@@ -151,7 +158,7 @@
 
       <!-- Prev preview (Grouping mode) -->
       <div id="prev-preview">
-        <span class="preview-label" style="background: var(--accent-group); color: #000;">Anterior</span>
+        <span class="preview-label prev-preview-label">Anterior</span>
         <img id="prev-photo" src="" alt="Foto anterior" draggable="false">
       </div>
 
@@ -198,6 +205,14 @@
           </svg>
         </button>
       </div>
+
+      <!-- Stats Button -->
+      <div id="btn-stats" class="stat stat-settings btn-stats-swipe" title="Estatísticas e Mapa">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 20V10M12 20V4M6 20v-6"/>
+        </svg>
+        <span>Estatísticas</span>
+      </div>
     </div>
 
     <!-- ════════════════════════════════════════════
@@ -207,10 +222,10 @@
       <div class="group-header">
         <h2>Escolhe as fotos para guardar</h2>
         <p>Clica nas fotos que queres manter. As restantes serão apagadas.</p>
-        <div style="margin-top: 16px; display: flex; gap: 12px; justify-content: center;">
-          <button id="btn-delete-selected" class="btn-danger" style="width: auto; padding: 12px 24px; margin: 0; display: none;">Apagar Seleccionadas</button>
-          <button id="btn-save-later" class="btn-secondary" style="width: auto; padding: 12px 24px; margin: 0;">Decidir Mais Tarde</button>
-          <button id="btn-confirm-group" class="btn-primary" style="width: auto; padding: 12px 32px; margin: 0; display: none;">Confirmar Selecção</button>
+        <div class="group-modal-actions">
+          <button id="btn-delete-selected" class="btn-danger btn-modal-action" style="display: none;">Apagar Seleccionadas</button>
+          <button id="btn-save-later" class="btn-secondary btn-modal-action">Decidir Mais Tarde</button>
+          <button id="btn-confirm-group" class="btn-primary btn-modal-action-wide" style="display: none;">Confirmar Selecção</button>
         </div>
         <p class="group-hint"><kbd>ESC</kbd> cancelar | <kbd>ENTER</kbd> guardar mais tarde / confirmar selecção</p>
       </div>
@@ -221,14 +236,14 @@
          GALLERY MODAL (KEPT/TRASHED)
          ════════════════════════════════════════════ -->
     <div id="gallery-modal">
-      <div class="modal-close-btn" onclick="cleanupGalleryModal(); document.getElementById('gallery-modal').classList.remove('active')">
+      <div class="modal-close-btn">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </div>
       <div class="group-header">
         <h2 id="gallery-title">Galeria</h2>
         <p id="gallery-desc">Fotos Processadas</p>
-        <div style="margin-top: 16px;">
-          <button id="btn-restore-gallery" class="btn-primary" style="width: auto; padding: 12px 32px; display: none; margin: 0;">Restaurar para a fila</button>
+        <div class="group-modal-actions">
+          <button id="btn-restore-gallery" class="btn-primary gallery-restore-btn">Restaurar para a fila</button>
         </div>
         <p class="group-hint"><kbd>ESC</kbd> ou clica fora para fechar</p>
       </div>
@@ -239,7 +254,7 @@
          GROUPS LIST MODAL
          ════════════════════════════════════════════ -->
     <div id="groups-list-modal">
-      <div class="modal-close-btn" onclick="cleanupGroupsListModal(); document.getElementById('groups-list-modal').classList.remove('active')">
+      <div class="modal-close-btn">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </div>
       <div class="group-header">
@@ -247,7 +262,7 @@
         <p id="groups-list-desc">Pastas com decisões adiadas</p>
         <p class="group-hint"><kbd>ESC</kbd> ou clica fora para fechar</p>
       </div>
-      <div id="groups-list-grid" class="group-grid" style="align-items: flex-start;"></div>
+      <div id="groups-list-grid" class="group-grid"></div>
     </div>
 
     <!-- ════════════════════════════════════════════
@@ -283,6 +298,9 @@
         <p class="done-note">As fotos apagadas estão na pasta <code>_trash</code></p>
         <button id="restart-btn" class="btn-primary">
           <span>Recomeçar</span>
+        </button>
+        <button id="done-stats-btn" class="btn-secondary done-stats-btn">
+          <span>Ver Estatísticas</span>
         </button>
       </div>
     </div>
@@ -356,8 +374,66 @@
       </div>
     </div>
 
+    <!-- ════════════════════════════════════════════
+         STATISTICS SCREEN
+         ════════════════════════════════════════════ -->
+    <div id="stats-screen" class="screen">
+      <div class="stats-container">
+        <div class="stats-header">
+          <button id="stats-back-btn" class="btn-secondary stats-back-btn">
+            <svg class="stats-back-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Voltar
+          </button>
+          <h2>Estatísticas da Pasta</h2>
+        </div>
+        
+        <div id="stats-loading" class="stats-loading">
+          <div class="spinner"></div>
+          <p id="stats-loading-text">A extrair coordenadas GPS das fotos...</p>
+        </div>
+
+        <div id="stats-dashboard" class="stats-dashboard hidden">
+          <div class="stats-grid">
+            <div class="stat-widget">
+              <h3>Fotos Analisadas</h3>
+              <div id="stat-total-photos" class="stat-big-number">0</div>
+            </div>
+            <div class="stat-widget">
+              <h3>Com GPS / Metadados</h3>
+              <div id="stat-gps-photos" class="stat-big-number">0</div>
+            </div>
+          </div>
+
+          <div class="stat-widget widget-heatmap">
+            <h3>Mapa de Calor (Locais das Fotos)</h3>
+            <div id="heatmap-container" class="map-container"></div>
+          </div>
+          
+          <div class="stats-grid-large">
+            <div class="stat-widget widget-chart">
+              <h3>Linha do Tempo (Por Dia)</h3>
+              <div class="chart-container">
+                <canvas id="timeline-chart"></canvas>
+              </div>
+            </div>
+            
+            <div class="stat-widget widget-chart">
+              <h3>Câmaras / Smartphones</h3>
+              <div class="chart-container">
+                <canvas id="cameras-chart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="analyzer.js"></script>
   <script src="app.js"></script>
 </body>

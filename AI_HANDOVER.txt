@@ -7,57 +7,66 @@ poupando tokens e leitura exaustiva do código-fonte original.
 
 [ 1. ARQUITETURA GERAL ]
 - Projeto: "Bumble Foto", uma aplicação web "serverless" (100% frontend).
-- Objetivo: Fazer triagem rápida de grandes pastas de fotografias locais usando gestos de swipe estilo Tinder (Esquerda = Apagar, Direita = Manter, Baixo = Agrupar semelhantes).
-- Tecnologia: HTML5, CSS3, Vanilla JavaScript (ES6+). Sem dependências, sem frameworks, sem backend.
-- API Core: "File System Access API" nativa do browser (requer Chrome/Edge/Opera e contexto seguro HTTPS ou localhost).
-  -> A app pede permissão de leitura/escrita de uma diretoria local na máquina do utilizador.
-  -> Move ficheiros fisicamente para as subpastas `_kept`, `_trash` e pastas com timestamps para os grupos. 
+- Objetivo: Fazer triagem rápida de grandes pastas de fotografias locais
+  usando gestos de swipe estilo Tinder (Esquerda = Apagar, Direita = Manter,
+  Baixo = Agrupar semelhantes).
+- Tecnologia: HTML5, CSS3, Vanilla JavaScript (ES6+). Sem frameworks, sem backend.
+- API Core: "File System Access API" nativa do browser (Chrome/Edge/Opera + HTTPS/localhost).
+  -> A app pede permissão de leitura/escrita de uma diretoria local.
+  -> Move ficheiros para as subpastas `_kept`, `_trash` e `_groups`.
 
 [ 2. ESTRUTURA DE FICHEIROS ]
 
 1. index.html
-   - O documento principal. Organizado por "Screens" (ecrãs), alternados via CSS (classe `.active`).
-   - `#folder-screen`: Ecrã inicial, botão para invocar o `showDirectoryPicker()`.
-   - `#swipe-screen`: Ecrã principal de triagem. Contém `#photo-card` (a foto atual) e as pre-visualizações (`#next-preview` / `#prev-preview`).
+   - Documento principal. Organizado por "Screens" alternados via CSS (`.active`).
+   - `#folder-screen`: Ecrã inicial com `showDirectoryPicker()`.
+   - `#swipe-screen`: Ecrã de triagem com `#photo-card` e previews.
    - `#done-screen`: Ecrã final de estatísticas.
-   - Modais: Contém caixas de diálogo para Configurações (`#settings-modal`), Seleção de Grupos (`#group-modal`) e Galerias (`#gallery-modal`).
+   - `#stats-screen`: Dashboard com mapa de calor (Leaflet) e gráficos (Chart.js).
+   - Modais: `#settings-modal`, `#group-modal`, `#gallery-modal`, `#groups-list-modal`.
+   - NOTA: Não há inline event handlers (onclick) — tudo registado via addEventListener no JS.
+   - NOTA: Estilos inline minimizados — usar classes CSS do styles.css.
 
 2. styles.css
-   - Usa variáveis CSS nativas (`:root`) para temas escuros ("premium UI").
-   - Física das animações de Cartões:
-     -> `.entering`: O cartão atual entra no ecrã com um deslize puramente horizontal a partir da direita (`transform: translateX(100vw)`).
-     -> `.exit-left`, `.exit-right`, `.exit-group`: Animações de saída quando o utilizador arrasta ou carrega num botão.
-   - Gotcha: Os modais (ex: `.modal`) têm `pointer-events: none;` na sua base. Quando ganham a classe `.active`, recebem `pointer-events: auto; opacity: 1;`. NUNCA usar `pointer-events: all;` pois causa bugs em elementos HTML (apenas válido em SVG).
+   - Variáveis CSS nativas (`:root`) para tema escuro premium.
+   - Animações de cartões: `.entering`, `.exit-left`, `.exit-right`, `.exit-group`.
+   - Classes utilitárias para componentes reutilizáveis (`.btn-stats-swipe`,
+     `.btn-modal-action`, `.group-modal-actions`, etc.)
+   - GOTCHA: Modais usam `pointer-events: none` na base e `pointer-events: auto`
+     quando `.active`. NUNCA usar `pointer-events: all` (só válido em SVG).
 
 3. analyzer.js
-   - Lógica de Processamento de Imagem (executa num Canvas escondido no browser).
-   - "Quality Tags" (Tags de Qualidade): Deteta "Desfocada" (Laplacian Variance), "Escura", e "Estourada" (Luminância) com base em limiares definidos pelo utilizador.
-   - "Similarity" (Deteção de Semelhantes):
-     -> `computeDHash`: Converte a foto numa grid 9x8 em tons de cinza e cria um hash de 64 bits para análise de estrutura de imagem.
-     -> `computeColorHistogram`: Cria um perfil de cores para detetar zoom/re-enquadramento da mesma cena.
-     -> `compareHashes`: Utiliza "Hamming Distance" para devolver uma % de semelhança.
-   - Lê parâmetros globais a partir do objeto `window.AppSettings`.
+   - Processamento de Imagem (Canvas escondido).
+   - "Quality Tags": Deteta "Desfocada" (Laplacian), "Escura", "Estourada".
+   - "Similarity": `computeDHash` (64-bit hash) + `computeColorHistogram` (64 bins).
+   - Lê parâmetros globais de `window.AppSettings` (backward compat).
 
 4. app.js
-   - O coração do projeto. Controla o DOM, gere as pastas, gere o estado.
-   - `state` object central:
-     -> `photos`: Array com as imagens pendentes (ficheiros a rever).
-     -> `currentIndex`: Índice da fotografia a mostrar.
-     -> `group`: Array temporário que armazena fotos do grupo em aberto.
-     -> `isGrouping`: Booleano que indica se o utilizador está em modo "Agrupar" (tecla M).
-     -> `undoStack`: Array (Pilha) de ações executadas para a tecla "Z" (Undo). Guarda refs para repor os ficheiros nos locais originais.
-   - Gestão de Memória: Usa `URL.createObjectURL(fileHandle.getFile())`. É CRÍTICO fazer sempre `URL.revokeObjectURL(...)` sempre que se troca a imagem (`state.currentObjectUrl`, `state.nextObjectUrl`, etc.) para o browser não encravar com milhares de fotos.
+   - Coração do projeto. Controla DOM, gere pastas, gere estado.
+   - Objeto `state` central:
+     -> `photos`: Array de imagens pendentes.
+     -> `currentIndex`: Índice da foto atual.
+     -> `group`: Array temporário de fotos agrupadas.
+     -> `isGrouping`: Se o modo de agrupamento está ativo.
+     -> `undoStack`: Pilha de ações para desfazer.
+     -> `settings`: Configurações do algoritmo (persistidas em localStorage).
+   - Settings: Guardadas em `state.settings` com backward compat `window.AppSettings`.
+   - `computeSimilarity(img1, img2)`: Função reutilizável para comparar similaridade
+     estrutural (dHash) e de cor (histograma) entre duas imagens.
+   - Gestão de Memória: Usa `URL.createObjectURL()` — CRÍTICO fazer sempre
+     `URL.revokeObjectURL()` ao trocar imagens.
+   - Preview layout: Gerido por `state._updatePreviewsLayout` (closure no setupEventListeners).
 
-[ 3. LÓGICA DE AGRUPAMENTO (Grouping Mode) ]
-- Quando o utilizador clica em "Agrupar", `state.isGrouping` muda para true.
-- A fotografia sai de `state.photos`, entra em `state.group`.
-- O UI muda: a miniatura "A Seguir" desaparece, e aparece a miniatura "Anterior" (a última adicionada a `state.group`) no canto inferior esquerdo para contexto visual (com moldura amarela).
-- Se a fotografia central tiver um dHash semelhante à fotografia do `prev-preview`, a `#photo-card` central recebe a classe `.current-group-alert` (pisca a amarelo informando o utilizador de que deve agrupá-las).
-- Ao "Parar e Selecionar" (endGrouping), abre-se o modal. Se as fotos forem aprovadas, o Node move-as para uma pasta com o nome `Grupo_YYYYMMDD_HHMMSS`.
+[ 3. LÓGICA DE AGRUPAMENTO ]
+- `state.isGrouping = true` quando o utilizador inicia um grupo (tecla M).
+- Fotos adicionadas a `state.group`, UI mostra preview "Anterior" com moldura amarela.
+- Detecção automática de similaridade via `computeSimilarity()` — marca com `.current-group-alert`.
+- `endGrouping()` abre modal para o utilizador escolher quais manter/apagar/decidir mais tarde.
 
 [ 4. FLUXO DE DESENVOLVIMENTO ]
-- Se pretendes adicionar um novo atalho de teclado: Procura por `setupKeyboardShortcuts()` no `app.js`.
-- Se pretendes ajustar uma variável de sensibilidade: Vai ao `index.html` (modal de settings) e atualiza o `updateSetting` no `app.js`. Tudo é persistente no `localStorage` sob a chave `bumblefoto_settings`.
-- Como os browsers exigem gestos de utilizador para API de ficheiros, toda a mecânica de init baseia-se no click do `#pick-folder-btn`.
+- Novo atalho de teclado: Procurar `setupKeyboardShortcuts()` em app.js.
+- Ajustar sensibilidade: Alterar defaults em `defaultSettings` (app.js) e UI em settings modal (index.html).
+- Novo evento: Adicionar em `setupEventListeners()` — nunca usar onclick inline no HTML.
+- Novo estilo: Criar classe CSS no styles.css — nunca usar inline styles no HTML.
 
 [FIM DO DOCUMENTO DE CONTEXTO]

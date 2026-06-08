@@ -1466,3 +1466,191 @@ input[type=range]:active::-webkit-slider-thumb {
   margin-top: 6px;
   line-height: 1.4;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   STATISTICS SCREEN
+   ═══════════════════════════════════════════════════════════════ */
+#stats-screen {
+  background: var(--bg-deep);
+  z-index: 100; /* Ensure it stays above everything */
+  overflow-y: auto;
+  align-items: flex-start; /* scroll from top */
+}
+
+.stats-container {
+  width: min(1000px, 95vw);
+  margin: 40px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.stats-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 10px;
+}
+
+.stats-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.stats-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 0;
+  color: var(--text-secondary);
+}
+
+.stats-loading.hidden {
+  display: none;
+}
+
+.stats-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 40px;
+}
+
+.stats-dashboard.hidden {
+  display: none;
+}
+
+.stat-widget {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.stat-widget h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.widget-heatmap {
+  height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-container {
+  flex: 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
+}
+
+.stats-grid-large {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.widget-chart {
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-container {
+  position: relative;
+  height: 300px;
+  width: 100%;
+}
+
+.stat-big-number {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--accent-undo);
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ─── Utility Classes (replaces inline styles) ───────────── */
+
+.btn-stats-swipe {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  z-index: 10;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  backdrop-filter: blur(10px);
+  padding: 8px 16px;
+  border-radius: var(--radius-xl);
+}
+
+.btn-stats-swipe span {
+  margin-left: 8px;
+  font-size: 14px;
+}
+
+.btn-folder-stats {
+  margin-top: 10px;
+  color: #818cf8;
+  border-color: rgba(129, 140, 248, 0.3);
+}
+
+.group-modal-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn-modal-action {
+  width: auto;
+  padding: 12px 24px;
+  margin: 0;
+}
+
+.btn-modal-action-wide {
+  width: auto;
+  padding: 12px 32px;
+  margin: 0;
+}
+
+.gallery-restore-btn {
+  width: auto;
+  padding: 12px 32px;
+  display: none;
+  margin: 0;
+}
+
+.stats-back-icon {
+  margin-right: 6px;
+}
+
+.stats-back-btn {
+  width: auto;
+  margin: 0;
+  padding: 10px 16px;
+}
+
+.done-stats-btn {
+  margin-top: 12px;
+}
+
+.prev-preview-label {
+  background: var(--accent-group);
+  color: #000;
+}
