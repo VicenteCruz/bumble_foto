@@ -1,0 +1,63 @@
+========================================================================
+BUMBLE FOTO - AI CONTEXT & HANDOVER DOCUMENTATION
+========================================================================
+Este ficheiro destina-se a fornecer contexto rápido a assistentes de 
+Inteligência Artificial que trabalhem neste repositório no futuro, 
+poupando tokens e leitura exaustiva do código-fonte original.
+
+[ 1. ARQUITETURA GERAL ]
+- Projeto: "Bumble Foto", uma aplicação web "serverless" (100% frontend).
+- Objetivo: Fazer triagem rápida de grandes pastas de fotografias locais usando gestos de swipe estilo Tinder (Esquerda = Apagar, Direita = Manter, Baixo = Agrupar semelhantes).
+- Tecnologia: HTML5, CSS3, Vanilla JavaScript (ES6+). Sem dependências, sem frameworks, sem backend.
+- API Core: "File System Access API" nativa do browser (requer Chrome/Edge/Opera e contexto seguro HTTPS ou localhost).
+  -> A app pede permissão de leitura/escrita de uma diretoria local na máquina do utilizador.
+  -> Move ficheiros fisicamente para as subpastas `_kept`, `_trash` e pastas com timestamps para os grupos. 
+
+[ 2. ESTRUTURA DE FICHEIROS ]
+
+1. index.html
+   - O documento principal. Organizado por "Screens" (ecrãs), alternados via CSS (classe `.active`).
+   - `#folder-screen`: Ecrã inicial, botão para invocar o `showDirectoryPicker()`.
+   - `#swipe-screen`: Ecrã principal de triagem. Contém `#photo-card` (a foto atual) e as pre-visualizações (`#next-preview` / `#prev-preview`).
+   - `#done-screen`: Ecrã final de estatísticas.
+   - Modais: Contém caixas de diálogo para Configurações (`#settings-modal`), Seleção de Grupos (`#group-modal`) e Galerias (`#gallery-modal`).
+
+2. styles.css
+   - Usa variáveis CSS nativas (`:root`) para temas escuros ("premium UI").
+   - Física das animações de Cartões:
+     -> `.entering`: O cartão atual entra no ecrã com um deslize puramente horizontal a partir da direita (`transform: translateX(100vw)`).
+     -> `.exit-left`, `.exit-right`, `.exit-group`: Animações de saída quando o utilizador arrasta ou carrega num botão.
+   - Gotcha: Os modais (ex: `.modal`) têm `pointer-events: none;` na sua base. Quando ganham a classe `.active`, recebem `pointer-events: auto; opacity: 1;`. NUNCA usar `pointer-events: all;` pois causa bugs em elementos HTML (apenas válido em SVG).
+
+3. analyzer.js
+   - Lógica de Processamento de Imagem (executa num Canvas escondido no browser).
+   - "Quality Tags" (Tags de Qualidade): Deteta "Desfocada" (Laplacian Variance), "Escura", e "Estourada" (Luminância) com base em limiares definidos pelo utilizador.
+   - "Similarity" (Deteção de Semelhantes):
+     -> `computeDHash`: Converte a foto numa grid 9x8 em tons de cinza e cria um hash de 64 bits para análise de estrutura de imagem.
+     -> `computeColorHistogram`: Cria um perfil de cores para detetar zoom/re-enquadramento da mesma cena.
+     -> `compareHashes`: Utiliza "Hamming Distance" para devolver uma % de semelhança.
+   - Lê parâmetros globais a partir do objeto `window.AppSettings`.
+
+4. app.js
+   - O coração do projeto. Controla o DOM, gere as pastas, gere o estado.
+   - `state` object central:
+     -> `photos`: Array com as imagens pendentes (ficheiros a rever).
+     -> `currentIndex`: Índice da fotografia a mostrar.
+     -> `group`: Array temporário que armazena fotos do grupo em aberto.
+     -> `isGrouping`: Booleano que indica se o utilizador está em modo "Agrupar" (tecla M).
+     -> `undoStack`: Array (Pilha) de ações executadas para a tecla "Z" (Undo). Guarda refs para repor os ficheiros nos locais originais.
+   - Gestão de Memória: Usa `URL.createObjectURL(fileHandle.getFile())`. É CRÍTICO fazer sempre `URL.revokeObjectURL(...)` sempre que se troca a imagem (`state.currentObjectUrl`, `state.nextObjectUrl`, etc.) para o browser não encravar com milhares de fotos.
+
+[ 3. LÓGICA DE AGRUPAMENTO (Grouping Mode) ]
+- Quando o utilizador clica em "Agrupar", `state.isGrouping` muda para true.
+- A fotografia sai de `state.photos`, entra em `state.group`.
+- O UI muda: a miniatura "A Seguir" desaparece, e aparece a miniatura "Anterior" (a última adicionada a `state.group`) no canto inferior esquerdo para contexto visual (com moldura amarela).
+- Se a fotografia central tiver um dHash semelhante à fotografia do `prev-preview`, a `#photo-card` central recebe a classe `.current-group-alert` (pisca a amarelo informando o utilizador de que deve agrupá-las).
+- Ao "Parar e Selecionar" (endGrouping), abre-se o modal. Se as fotos forem aprovadas, o Node move-as para uma pasta com o nome `Grupo_YYYYMMDD_HHMMSS`.
+
+[ 4. FLUXO DE DESENVOLVIMENTO ]
+- Se pretendes adicionar um novo atalho de teclado: Procura por `setupKeyboardShortcuts()` no `app.js`.
+- Se pretendes ajustar uma variável de sensibilidade: Vai ao `index.html` (modal de settings) e atualiza o `updateSetting` no `app.js`. Tudo é persistente no `localStorage` sob a chave `bumblefoto_settings`.
+- Como os browsers exigem gestos de utilizador para API de ficheiros, toda a mecânica de init baseia-se no click do `#pick-folder-btn`.
+
+[FIM DO DOCUMENTO DE CONTEXTO]
