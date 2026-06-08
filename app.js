@@ -38,6 +38,32 @@ const state = {
   activeSavedGroupName: null,
 };
 
+// ─── Settings ──────────────────────────────────────────────────
+
+// Default Settings
+const defaultSettings = {
+  dHashSim: 71,
+  histSim: 75,
+  blurThreshold: 80,
+  darkThreshold: 50,
+  brightThreshold: 215
+};
+
+window.AppSettings = { ...defaultSettings };
+
+// Load from LocalStorage
+try {
+  const saved = localStorage.getItem('bumblefoto_settings');
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    window.AppSettings = { ...defaultSettings, ...parsed };
+  }
+} catch (e) {}
+
+function saveSettings() {
+  localStorage.setItem('bumblefoto_settings', JSON.stringify(window.AppSettings));
+}
+
 // ─── DOM Helpers ───────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
@@ -236,6 +262,9 @@ async function renderPhoto() {
 
   const entry = state.photos[state.currentIndex];
 
+  // Clear previous group alert
+  $('photo-card').classList.remove('current-group-alert');
+
   // Show loading spinner
   $('photo-loading').classList.remove('hidden');
 
@@ -272,6 +301,39 @@ async function renderPhoto() {
           console.error('Image analysis error:', e);
         }
       }
+
+      // Grouping similarity detection
+      if (state.isGrouping && state.group.length > 0 && typeof ImageAnalyzer !== 'undefined') {
+        try {
+          const prevEntry = state.group[state.group.length - 1];
+          const prevUrl = await createObjectUrl(prevEntry.handle);
+          const prevImg = new Image();
+          
+          prevImg.onload = async () => {
+            let dHashSim = 0;
+            let histSim = 0;
+            
+            if (ImageAnalyzer.computeDHash) {
+              const dHash1 = await ImageAnalyzer.computeDHash(prevImg);
+              const dHash2 = await ImageAnalyzer.computeDHash(img);
+              if (dHash1 && dHash2) dHashSim = ImageAnalyzer.compareHashes(dHash1, dHash2);
+            }
+            if (ImageAnalyzer.computeColorHistogram) {
+              const hist1 = await ImageAnalyzer.computeColorHistogram(prevImg);
+              const hist2 = await ImageAnalyzer.computeColorHistogram(img);
+              if (hist1 && hist2) histSim = ImageAnalyzer.compareHistograms(hist1, hist2);
+            }
+            
+            if (dHashSim >= window.AppSettings.dHashSim || histSim >= window.AppSettings.histSim) {
+              $('photo-card').classList.add('current-group-alert');
+            }
+            URL.revokeObjectURL(prevUrl);
+          };
+          prevImg.src = prevUrl;
+        } catch (e) {
+          console.error('Similarity group error:', e);
+        }
+      }
     };
 
     img.onerror = () => {
@@ -294,8 +356,8 @@ async function renderPhoto() {
   // Progress bar
   $('progress-fill').style.width = ((state.currentIndex / state.photos.length) * 100) + '%';
 
-  // Next photo preview
-  renderNextPreview();
+  // Photo previews (next or prev)
+  renderPreviews();
 
   // Group indicator
   updateGroupIndicator();
@@ -310,30 +372,93 @@ async function renderPhoto() {
 }
 
 /**
- * Render the next photo preview in the bottom-right corner.
+ * Render the next/prev photo previews depending on mode.
  */
-async function renderNextPreview() {
+async function renderPreviews() {
   const nextIdx = state.currentIndex + 1;
   const preview = $('next-preview');
+  const prevPreview = $('prev-preview');
 
-  // Revoke previous preview URL
+  // Revoke previous URLs
   if (state.nextObjectUrl) {
     URL.revokeObjectURL(state.nextObjectUrl);
     state.nextObjectUrl = null;
   }
+  if (state.prevObjectUrl) {
+    URL.revokeObjectURL(state.prevObjectUrl);
+    state.prevObjectUrl = null;
+  }
 
-  if (nextIdx < state.photos.length) {
-    try {
-      const url = await createObjectUrl(state.photos[nextIdx].handle);
-      state.nextObjectUrl = url;
-      $('next-photo').src = url;
-      $('side-photo').src = url; // Also update side-by-side image
-      preview.classList.add('visible');
-    } catch {
-      preview.classList.remove('visible');
+  const btnGroup = $('btn-group');
+  if (btnGroup) btnGroup.classList.remove('similar-pulse');
+
+  if (state.isGrouping) {
+    preview.classList.remove('visible');
+    preview.classList.remove('similar-alert');
+    
+    if (state.group.length > 0 && prevPreview) {
+      try {
+        const prevEntry = state.group[state.group.length - 1];
+        const url = await createObjectUrl(prevEntry.handle);
+        state.prevObjectUrl = url;
+        $('prev-photo').src = url;
+        $('side-photo').src = url; // Update side-by-side
+        prevPreview.classList.add('visible');
+      } catch {
+        prevPreview.classList.remove('visible');
+      }
+    } else if (prevPreview) {
+      prevPreview.classList.remove('visible');
     }
   } else {
-    preview.classList.remove('visible');
+    if (prevPreview) prevPreview.classList.remove('visible');
+    
+    if (nextIdx < state.photos.length) {
+      try {
+        const url = await createObjectUrl(state.photos[nextIdx].handle);
+        state.nextObjectUrl = url;
+        preview.classList.remove('similar-alert');
+        
+        const nextImg = $('next-photo');
+        nextImg.src = url;
+        $('side-photo').src = url; // Update side-by-side
+        preview.classList.add('visible');
+
+        // Detect similarity once next image loads
+        nextImg.onload = async () => {
+          if (typeof ImageAnalyzer !== 'undefined') {
+            try {
+              const currentImg = $('current-photo');
+              let dHashSim = 0;
+              let histSim = 0;
+
+              if (ImageAnalyzer.computeDHash) {
+                const dHash1 = await ImageAnalyzer.computeDHash(currentImg);
+                const dHash2 = await ImageAnalyzer.computeDHash(nextImg);
+                if (dHash1 && dHash2) dHashSim = ImageAnalyzer.compareHashes(dHash1, dHash2);
+              }
+
+              if (ImageAnalyzer.computeColorHistogram) {
+                const hist1 = await ImageAnalyzer.computeColorHistogram(currentImg);
+                const hist2 = await ImageAnalyzer.computeColorHistogram(nextImg);
+                if (hist1 && hist2) histSim = ImageAnalyzer.compareHistograms(hist1, hist2);
+              }
+              
+              if (dHashSim >= window.AppSettings.dHashSim || histSim >= window.AppSettings.histSim) {
+                preview.classList.add('similar-alert');
+                if (btnGroup) btnGroup.classList.add('similar-pulse');
+              }
+            } catch (e) {}
+          }
+        };
+      } catch {
+        preview.classList.remove('visible');
+        preview.classList.remove('similar-alert');
+      }
+    } else {
+      preview.classList.remove('visible');
+      preview.classList.remove('similar-alert');
+    }
   }
 }
 
@@ -417,6 +542,7 @@ async function handleGroup() {
   }
 
   state.group.push(entry);
+  state.undoStack.push({ type: 'grouping', index: state.currentIndex });
   updateGroupIndicator();
 
   await animateExit('group');
@@ -459,6 +585,24 @@ async function handleUndo() {
   }
 
   const last = state.undoStack.pop();
+
+  if (last.type === 'grouping') {
+    if (state.group.length > 0) {
+      state.group.pop();
+      state.currentIndex = last.index;
+      state.isGrouping = true; // Volta a activar o modo de agrupamento
+      
+      if (state.group.length === 0) {
+        state.isGrouping = false;
+      }
+      
+      updateControlsUI();
+      updateGroupIndicator();
+      showToast('Desagrupada', 'info');
+      renderPhoto();
+    }
+    return;
+  }
 
   if (last.type === 'trash') {
     try {
@@ -535,20 +679,26 @@ async function handleUndo() {
 // GROUP SELECTION MODAL
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * Display the group selection modal with all grouped photos.
- */
-async function showGroupModal() {
-  state.selectedPhotos = new Set(); // Reset selection
-  const modal = $('group-modal');
+async function renderGroupGrid() {
   const grid = $('group-grid');
   grid.innerHTML = '';
+  const btnDelete = $('btn-delete-selected');
+  const btnConfirm = $('btn-confirm-group');
+  if (btnDelete) {
+    btnDelete.style.display = state.selectedPhotos.size > 0 ? 'inline-flex' : 'none';
+  }
+  if (btnConfirm) {
+    btnConfirm.style.display = state.selectedPhotos.size > 0 ? 'inline-flex' : 'none';
+  }
 
   for (let i = 0; i < state.group.length; i++) {
     const entry = state.group[i];
 
     const item = document.createElement('div');
     item.className = 'group-item';
+    if (state.selectedPhotos.has(entry.name)) {
+      item.classList.add('selected');
+    }
     item.style.animationDelay = (i * 0.08) + 's';
 
     const img = document.createElement('img');
@@ -592,11 +742,86 @@ async function showGroupModal() {
         state.selectedPhotos.add(entry.name);
         item.classList.add('selected');
       }
+      if (btnDelete) {
+        btnDelete.style.display = state.selectedPhotos.size > 0 ? 'inline-flex' : 'none';
+      }
+      if (btnConfirm) {
+        btnConfirm.style.display = state.selectedPhotos.size > 0 ? 'inline-flex' : 'none';
+      }
     });
     grid.appendChild(item);
   }
+}
 
+/**
+ * Display the group selection modal with all grouped photos.
+ */
+async function showGroupModal() {
+  state.selectedPhotos = new Set(); // Reset selection
+  cleanupGroupModal(); // clean just in case
+  const modal = $('group-modal');
+  await renderGroupGrid();
   modal.classList.add('active');
+}
+
+/**
+ * Delete selected photos directly from the group without closing it.
+ */
+async function deleteSelectedFromGroup() {
+  if (state.selectedPhotos.size === 0) return;
+
+  const toTrash = [];
+  const toKeepInGroup = [];
+
+  for (const entry of state.group) {
+    if (state.selectedPhotos.has(entry.name)) {
+      toTrash.push(entry);
+    } else {
+      toKeepInGroup.push(entry);
+    }
+  }
+
+  // Move to _trash
+  try {
+    const isSavedGroup = !!state.activeSavedGroupHandle;
+    for (const entry of toTrash) {
+      if (isSavedGroup) {
+        await moveFileTo(entry.handle, entry.name, state.trashHandle, state.activeSavedGroupHandle);
+      } else {
+        await trashFile(entry.handle, entry.name);
+      }
+    }
+  } catch (err) {
+    showToast('Erro ao apagar selecção: ' + err.message, 'error');
+    return;
+  }
+
+  state.stats.trashed += toTrash.length;
+
+  state.group = toKeepInGroup;
+  state.selectedPhotos.clear();
+  
+  cleanupGroupModal(); // Revoke all old urls
+
+  if (state.group.length === 0) {
+    $('group-modal').classList.remove('active');
+    if (state.activeSavedGroupHandle) {
+      try {
+        await state.groupsHandle.removeEntry(state.activeSavedGroupName, { recursive: true });
+      } catch (err) {}
+      state.activeSavedGroupHandle = null;
+      state.activeSavedGroupName = null;
+      showGroupsList();
+    } else {
+      state.isGrouping = false;
+      updateControlsUI();
+      renderPhoto();
+    }
+    showToast('Todas apagadas do grupo', 'info');
+  } else {
+    await renderGroupGrid();
+    showToast(toTrash.length + ' apagadas', 'info');
+  }
 }
 
 /**
@@ -928,7 +1153,7 @@ async function showGallery(type) {
     showToast('Erro ao ler pasta: ' + err.message, 'error');
   }
   
-  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  files.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
   
   for (let i = 0; i < files.length; i++) {
     const entry = files[i];
@@ -1150,11 +1375,25 @@ function setupKeyboardShortcuts() {
       return;
     }
 
-    // Group modal — only Escape
+    // Group modal
     if ($('group-modal').classList.contains('active')) {
       if (e.key === 'Escape') {
         e.preventDefault();
         cancelGroupSelection();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (state.selectedPhotos.size > 0) {
+          confirmGroupSelection();
+        } else {
+          saveGroupForLater();
+        }
+      } else if (e.key.toLowerCase() === 'z') {
+        if (!state.activeSavedGroupHandle) {
+          e.preventDefault();
+          cleanupGroupModal();
+          $('group-modal').classList.remove('active');
+          handleUndo();
+        }
       }
       return;
     }
@@ -1186,11 +1425,11 @@ function setupKeyboardShortcuts() {
           if (!state.isGrouping) { e.preventDefault(); handleKeep(); } break;
         case 'ArrowLeft': case 'a': case 'A':
           if (!state.isGrouping) { e.preventDefault(); handleTrash(); } break;
-        case 'm': case 'M':
+        case 'ArrowDown': case 'm': case 'M':
           e.preventDefault(); handleGroup(); break;
         case 'z': case 'Z':
-          if (!state.isGrouping) { e.preventDefault(); handleUndo(); } break;
-        case ' ':
+          e.preventDefault(); handleUndo(); break;
+        case 'ArrowUp':
           e.preventDefault();
           if (state.isGrouping) endGrouping();
           else toggleFullscreen();
@@ -1303,12 +1542,17 @@ function toggleSideBySide() {
 }
 
 function enableSideBySide() {
-  const nextIdx = state.currentIndex + 1;
-  if (nextIdx >= state.photos.length) return; // No next photo
+  if (state.isGrouping) {
+    if (state.group.length === 0) return;
+  } else {
+    const nextIdx = state.currentIndex + 1;
+    if (nextIdx >= state.photos.length) return;
+  }
   
   state.sideBySide = true;
   $('photo-stage').classList.add('side-by-side-mode');
   $('next-preview').style.display = 'none';
+  if ($('prev-preview')) $('prev-preview').style.display = 'none';
 }
 
 function disableSideBySide() {
@@ -1316,6 +1560,7 @@ function disableSideBySide() {
   state.sideBySide = false;
   $('photo-stage').classList.remove('side-by-side-mode');
   $('next-preview').style.display = '';
+  if ($('prev-preview')) $('prev-preview').style.display = '';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1323,6 +1568,21 @@ function disableSideBySide() {
 // ═══════════════════════════════════════════════════════════════
 
 function setupEventListeners() {
+  // Dynamic resize of next-preview to avoid overlap
+  const photoCardObserver = new ResizeObserver(entries => {
+    for (let entry of entries) {
+      const rect = entry.target.getBoundingClientRect();
+      const rightSpace = window.innerWidth - rect.right;
+      
+      const preview = $('next-preview');
+      let previewMaxWidth = rightSpace - 24; // 12px gap from photo, 12px gap from right edge
+      previewMaxWidth = Math.max(180, Math.min(previewMaxWidth, 500));
+      
+      preview.style.maxWidth = `${previewMaxWidth}px`;
+    }
+  });
+  photoCardObserver.observe($('current-photo'));
+
   // Folder screen
   $('pick-folder-btn').addEventListener('click', pickFolder);
   $('start-btn').addEventListener('click', startSession);
@@ -1338,6 +1598,20 @@ function setupEventListeners() {
   
   $('btn-confirm-group').addEventListener('click', confirmGroupSelection);
   $('btn-save-later').addEventListener('click', saveGroupForLater);
+  $('btn-delete-selected').addEventListener('click', deleteSelectedFromGroup);
+  // Open fullscreen on scroll for swipe images
+  $('current-photo').addEventListener('wheel', (e) => {
+    e.preventDefault();
+    openFullscreen($('current-photo').src);
+  }, { passive: false });
+
+  $('side-photo').addEventListener('wheel', (e) => {
+    e.preventDefault();
+    openFullscreen($('side-photo').src);
+  }, { passive: false });
+
+  // Setup advanced zoom/pan ONLY for fullscreen
+  setupFullscreenZoomPan($('fullscreen-photo'));
 
   // Gallery and Groups
   $('stat-kept').addEventListener('click', () => showGallery('kept'));
@@ -1360,9 +1634,14 @@ function setupEventListeners() {
     }
   });
 
-  // Fullscreen viewer — click to close
-  $('fullscreen-viewer').addEventListener('click', () => {
-    $('fullscreen-viewer').classList.remove('active');
+  // Fullscreen viewer — click to close (only if clicking outside the image or if it's not zoomed)
+  $('fullscreen-viewer').addEventListener('click', (e) => {
+    if (e.target !== $('fullscreen-photo') || !$('fullscreen-photo').classList.contains('zoom-grabbable')) {
+      $('fullscreen-viewer').classList.remove('active');
+      if ($('fullscreen-photo')._resetZoomPan) {
+        $('fullscreen-photo')._resetZoomPan();
+      }
+    }
   });
 
   // Side photo click to disable
@@ -1370,7 +1649,128 @@ function setupEventListeners() {
 
   // Toggle side-by-side via preview click
   $('next-preview').addEventListener('click', toggleSideBySide);
+  if ($('prev-preview')) {
+    $('prev-preview').addEventListener('click', toggleSideBySide);
+  }
+
+  // Settings Modal
+  $('btn-settings').addEventListener('click', () => {
+    // Populate sliders with current settings
+    $('set-dhash').value = window.AppSettings.dHashSim;
+    $('val-dhash').textContent = window.AppSettings.dHashSim + '%';
+    
+    $('set-hist').value = window.AppSettings.histSim;
+    $('val-hist').textContent = window.AppSettings.histSim + '%';
+
+    $('set-blur').value = window.AppSettings.blurThreshold;
+    $('val-blur').textContent = window.AppSettings.blurThreshold;
+
+    $('set-dark').value = window.AppSettings.darkThreshold;
+    $('val-dark').textContent = window.AppSettings.darkThreshold;
+
+    $('set-bright').value = window.AppSettings.brightThreshold;
+    $('val-bright').textContent = window.AppSettings.brightThreshold;
+
+    $('settings-modal').classList.add('active');
+  });
+
+  $('settings-close').addEventListener('click', () => {
+    $('settings-modal').classList.remove('active');
+  });
+
+  $('settings-modal').addEventListener('click', (e) => {
+    if (e.target === $('settings-modal')) {
+      $('settings-modal').classList.remove('active');
+    }
+  });
+
+  // Settings slider change events
+  const updateSetting = (id, key, suffix = '') => {
+    $(id).addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      window.AppSettings[key] = val;
+      $('val-' + id.replace('set-', '')).textContent = val + suffix;
+    });
+
+    $(id).addEventListener('change', () => {
+      saveSettings();
+      // Re-evaluate current photo
+      if (state.screen === 'viewer') {
+        renderPhoto(state.currentIndex, false); 
+        renderPreviews();
+      }
+    });
+  };
+
+  updateSetting('set-dhash', 'dHashSim', '%');
+  updateSetting('set-hist', 'histSim', '%');
+  updateSetting('set-blur', 'blurThreshold', '');
+  updateSetting('set-dark', 'darkThreshold', '');
+  updateSetting('set-bright', 'brightThreshold', '');
 
   // Done screen — restart
   $('restart-btn').addEventListener('click', () => showScreen('folder'));
+}
+
+function setupFullscreenZoomPan(imgElement) {
+  let scale = 1;
+  let translateX = 0;
+  let translateY = 0;
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+
+  const updateTransform = () => {
+    imgElement.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+  };
+
+  imgElement.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    
+    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+    scale += delta;
+    scale = Math.min(Math.max(1, scale), 8); // allow 8x zoom
+    
+    if (scale === 1) {
+      translateX = 0;
+      translateY = 0;
+      imgElement.classList.remove('zoom-grabbable', 'zoom-grabbing');
+    } else {
+      imgElement.classList.add('zoom-grabbable');
+    }
+    
+    updateTransform();
+  }, { passive: false });
+
+  imgElement.addEventListener('mousedown', (e) => {
+    if (scale > 1) {
+      e.preventDefault();
+      isDragging = true;
+      startX = e.clientX - translateX;
+      startY = e.clientY - translateY;
+      imgElement.classList.add('zoom-grabbing');
+    }
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    translateX = e.clientX - startX;
+    translateY = e.clientY - startY;
+    updateTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    imgElement.classList.remove('zoom-grabbing');
+  });
+
+  imgElement._resetZoomPan = () => {
+    scale = 1;
+    translateX = 0;
+    translateY = 0;
+    isDragging = false;
+    imgElement.classList.remove('zoom-grabbable', 'zoom-grabbing');
+    updateTransform();
+  };
 }

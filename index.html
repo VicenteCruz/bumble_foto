@@ -96,6 +96,9 @@
           <span id="stat-trashed-count">0</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </div>
+        <div id="btn-settings" class="stat stat-settings" title="Afinações de Algoritmo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
       </div>
 
       <!-- Group indicator -->
@@ -146,10 +149,16 @@
         <img id="next-photo" src="" alt="Próxima foto" draggable="false">
       </div>
 
+      <!-- Prev preview (Grouping mode) -->
+      <div id="prev-preview">
+        <span class="preview-label" style="background: var(--accent-group); color: #000;">Anterior</span>
+        <img id="prev-photo" src="" alt="Foto anterior" draggable="false">
+      </div>
+
       <!-- Controls bar -->
       <div id="controls-bar">
-        <!-- Normal mode controls -->
-        <button id="btn-undo" class="ctrl-btn btn-undo mode-normal" title="Desfazer (Z)">
+        <!-- Undo always visible -->
+        <button id="btn-undo" class="ctrl-btn btn-undo" title="Desfazer (Z)">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="1 4 1 10 7 10"/>
             <path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
@@ -199,10 +208,11 @@
         <h2>Escolhe as fotos para guardar</h2>
         <p>Clica nas fotos que queres manter. As restantes serão apagadas.</p>
         <div style="margin-top: 16px; display: flex; gap: 12px; justify-content: center;">
+          <button id="btn-delete-selected" class="btn-danger" style="width: auto; padding: 12px 24px; margin: 0; display: none;">Apagar Seleccionadas</button>
           <button id="btn-save-later" class="btn-secondary" style="width: auto; padding: 12px 24px; margin: 0;">Decidir Mais Tarde</button>
-          <button id="btn-confirm-group" class="btn-primary" style="width: auto; padding: 12px 32px; margin: 0;">Confirmar Selecção</button>
+          <button id="btn-confirm-group" class="btn-primary" style="width: auto; padding: 12px 32px; margin: 0; display: none;">Confirmar Selecção</button>
         </div>
-        <p class="group-hint"><kbd>ESC</kbd> para cancelar e guardar todas</p>
+        <p class="group-hint"><kbd>ESC</kbd> cancelar | <kbd>ENTER</kbd> guardar mais tarde / confirmar selecção</p>
       </div>
       <div id="group-grid"></div>
     </div>
@@ -211,6 +221,9 @@
          GALLERY MODAL (KEPT/TRASHED)
          ════════════════════════════════════════════ -->
     <div id="gallery-modal">
+      <div class="modal-close-btn" onclick="cleanupGalleryModal(); document.getElementById('gallery-modal').classList.remove('active')">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </div>
       <div class="group-header">
         <h2 id="gallery-title">Galeria</h2>
         <p id="gallery-desc">Fotos Processadas</p>
@@ -226,6 +239,9 @@
          GROUPS LIST MODAL
          ════════════════════════════════════════════ -->
     <div id="groups-list-modal">
+      <div class="modal-close-btn" onclick="cleanupGroupsListModal(); document.getElementById('groups-list-modal').classList.remove('active')">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </div>
       <div class="group-header">
         <h2 id="groups-list-title">Grupos para Mais Tarde</h2>
         <p id="groups-list-desc">Pastas com decisões adiadas</p>
@@ -268,6 +284,75 @@
         <button id="restart-btn" class="btn-primary">
           <span>Recomeçar</span>
         </button>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════
+         SETTINGS MODAL
+         ════════════════════════════════════════════ -->
+    <div id="settings-modal" class="modal">
+      <div class="modal-content settings-content">
+        <div class="modal-header">
+          <h2>Afinações de Algoritmo</h2>
+          <div class="modal-close" id="settings-close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+        
+        <div class="settings-body">
+          <div class="settings-group">
+            <h3>Detecção de Semelhança (Agrupar)</h3>
+            
+            <div class="setting-item">
+              <div class="setting-header">
+                <label for="set-dhash">Exigência Estrutural (dHash)</label>
+                <span id="val-dhash">71%</span>
+              </div>
+              <input type="range" id="set-dhash" min="50" max="100" value="71">
+              <p class="setting-desc">Fotos tiradas no mesmo ângulo. Valores baixos agrupam mais facilmente. <br><span style="color:var(--text-dim); opacity: 0.7;">(Original: 71%)</span></p>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-header">
+                <label for="set-hist">Exigência de Cores (Zoom / Crop)</label>
+                <span id="val-hist">75%</span>
+              </div>
+              <input type="range" id="set-hist" min="50" max="100" value="75">
+              <p class="setting-desc">Re-enquadramentos e zoom da mesma cena. <br><span style="color:var(--text-dim); opacity: 0.7;">(Original: 75%)</span></p>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3>Alertas de Qualidade (Tags)</h3>
+            
+            <div class="setting-item">
+              <div class="setting-header">
+                <label for="set-blur">Tolerância a Desfoque</label>
+                <span id="val-blur">80</span>
+              </div>
+              <input type="range" id="set-blur" min="10" max="300" value="80">
+              <p class="setting-desc">Valores altos exigem que a foto seja mais nítida. <br><span style="color:var(--text-dim); opacity: 0.7;">(Original: 80)</span></p>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-header">
+                <label for="set-dark">Limite de Sombra</label>
+                <span id="val-dark">50</span>
+              </div>
+              <input type="range" id="set-dark" min="10" max="120" value="50">
+              <p class="setting-desc">Luminosidade abaixo deste valor marca como "Escura". <br><span style="color:var(--text-dim); opacity: 0.7;">(Original: 50)</span></p>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-header">
+                <label for="set-bright">Limite de Luz</label>
+                <span id="val-bright">215</span>
+              </div>
+              <input type="range" id="set-bright" min="180" max="250" value="215">
+              <p class="setting-desc">Luminosidade acima deste valor marca como "Estourada". <br><span style="color:var(--text-dim); opacity: 0.7;">(Original: 215)</span></p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
