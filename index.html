@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Bumble Foto — Organiza as tuas fotografias com swipe">
-  <title>Bumble Foto</title>
+  <meta name="description" content="Fotobumble">
+  <title>Fotobumble</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -34,8 +34,7 @@
               </defs>
             </svg>
           </div>
-          <h1 class="logo-title">Bumble Foto</h1>
-          <p class="logo-subtitle">Organiza as tuas fotografias com swipe</p>
+          <h1 class="logo-title">Fotobumble</h1>
         </div>
 
         <!-- Folder picker -->
@@ -48,16 +47,10 @@
           </button>
           <div id="selected-folder" class="selected-folder"></div>
           <button id="start-btn" class="btn-secondary" style="display:none">
-            <span>Começar triagem</span>
+            <span>Abrir Pasta</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14M12 5l7 7-7 7"/>
             </svg>
-          </button>
-          <button id="folder-stats-btn" class="btn-secondary btn-folder-stats" style="display:none">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 20V10M12 20V4M6 20v-6"/>
-            </svg>
-            <span>Ver Estatísticas</span>
           </button>
           <div id="folder-error" class="folder-error"></div>
           <div id="browser-warning" class="browser-warning">
@@ -66,12 +59,7 @@
         </div>
 
         <!-- Shortcuts hint -->
-        <div class="shortcuts-hint">
-          <div class="shortcut"><kbd>←</kbd> <span>Apagar</span></div>
-          <div class="shortcut"><kbd>→</kbd> <span>Guardar</span></div>
-          <div class="shortcut"><kbd>M</kbd> <span>Agrupar</span></div>
-          <div class="shortcut"><kbd>Z</kbd> <span>Desfazer</span></div>
-        </div>
+
       </div>
     </div>
 
@@ -116,50 +104,71 @@
 
       <!-- Photo stage -->
       <div id="photo-stage">
-        <div id="photo-card">
-          <!-- Loading spinner -->
-          <div id="photo-loading" class="photo-loading">
-            <div class="spinner"></div>
-          </div>
-          <!-- Photo -->
-          <img id="current-photo" src="" alt="Foto actual" draggable="false">
-          <!-- Swipe overlays -->
-          <div class="overlay overlay-keep">
-            <span>GUARDAR</span>
-          </div>
-          <div class="overlay overlay-trash">
-            <span>APAGAR</span>
-          </div>
-          <div class="overlay overlay-group">
-            <span>AGRUPAR</span>
-          </div>
-        </div>
         
-        <!-- Quality Tags (Ao lado da foto) -->
-        <div id="quality-tags" class="quality-tags"></div>
-
-        <!-- Side photo for comparison -->
-        <div id="side-photo-card">
-          <img id="side-photo" src="" alt="Foto a seguir" draggable="false">
-          <div class="side-photo-label">A seguir</div>
+        <!-- Left Zone for Prev Preview -->
+        <div class="preview-zone">
+          <div id="prev-preview">
+            <span class="preview-label prev-preview-label">Anterior</span>
+            <img id="prev-photo" src="" alt="Foto anterior" draggable="false">
+          </div>
         </div>
+
+        <!-- Center Zone -->
+        <div class="center-zone">
+          <div id="empty-folder-state" style="display: none; text-align: center; color: var(--text-secondary); flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+            <div style="font-size: 48px; margin-bottom: 16px;">📂</div>
+            <h2 style="margin-bottom: 24px;">Pasta Vazia</h2>
+            <button id="empty-stats-btn" class="btn-primary" style="width: auto;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+                <path d="M18 20V10M12 20V4M6 20v-6"/>
+              </svg>
+              <span>Ver Estatísticas da Pasta</span>
+            </button>
+          </div>
+
+          <div id="photo-card">
+            <!-- Loading spinner -->
+            <div id="photo-loading" class="photo-loading">
+              <div class="spinner"></div>
+            </div>
+            <!-- Photo -->
+            <img id="current-photo" src="" alt="Foto actual" draggable="false">
+            
+            <!-- Motion Photo Indicator -->
+            <div id="motion-photo-indicator" class="motion-indicator">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+              MP
+            </div>
+            
+            <!-- Swipe overlays -->
+            <div class="overlay overlay-keep"></div>
+            <div class="overlay overlay-trash"></div>
+            <div class="overlay overlay-group"></div>
+          </div>
+          
+          <!-- Quality Tags (Ao lado da foto) -->
+          <div id="quality-tags" class="quality-tags"></div>
+
+          <!-- Side photo for comparison -->
+          <div id="side-photo-card">
+            <img id="side-photo" src="" alt="Foto a seguir" draggable="false">
+            <div class="side-photo-label">A seguir</div>
+          </div>
+        </div>
+
+        <!-- Right Zone for Next Preview -->
+        <div class="preview-zone">
+          <div id="next-preview">
+            <span class="preview-label">A seguir</span>
+            <img id="next-photo" src="" alt="Próxima foto" draggable="false">
+          </div>
+        </div>
+
       </div>
 
       <!-- Photo filename -->
       <div id="photo-info">
         <span id="photo-filename"></span>
-      </div>
-
-      <!-- Next preview -->
-      <div id="next-preview">
-        <span class="preview-label">A seguir</span>
-        <img id="next-photo" src="" alt="Próxima foto" draggable="false">
-      </div>
-
-      <!-- Prev preview (Grouping mode) -->
-      <div id="prev-preview">
-        <span class="preview-label prev-preview-label">Anterior</span>
-        <img id="prev-photo" src="" alt="Foto anterior" draggable="false">
       </div>
 
       <!-- Controls bar -->
@@ -170,39 +179,45 @@
             <polyline points="1 4 1 10 7 10"/>
             <path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
           </svg>
+          <span class="btn-key-hint">Z</span>
         </button>
 
         <button id="btn-trash" class="ctrl-btn btn-trash mode-normal" title="Apagar (← ou A)">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
             <path d="M18 6L6 18M6 6l12 12"/>
           </svg>
+          <span class="btn-key-hint"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></span>
         </button>
 
-        <button id="btn-group" class="ctrl-btn btn-group mode-normal" title="Agrupar duplicadas (M)">
+        <button id="btn-group" class="ctrl-btn btn-group mode-normal" title="Agrupar duplicadas (↓)">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="7" width="13" height="13" rx="2"/>
             <path d="M9 3h11a2 2 0 012 2v11"/>
           </svg>
+          <span class="btn-key-hint"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></span>
         </button>
 
         <button id="btn-keep" class="ctrl-btn btn-keep mode-normal" title="Guardar (→ ou D)">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
           </svg>
+          <span class="btn-key-hint"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
         </button>
 
         <!-- Grouping mode controls (hidden by default) -->
-        <button id="btn-stop-group" class="ctrl-btn btn-stop-group mode-group hidden" title="Concluir Agrupamento (Espaço)">
+        <button id="btn-stop-group" class="ctrl-btn btn-stop-group mode-group hidden" title="Concluir Agrupamento (Enter)">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
+          <span class="btn-key-hint">ENT</span>
         </button>
 
-        <button id="btn-continue-group" class="ctrl-btn btn-continue-group mode-group hidden" title="Adicionar ao Grupo (M)">
+        <button id="btn-continue-group" class="ctrl-btn btn-continue-group mode-group hidden" title="Adicionar ao Grupo (↓)">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="7" width="13" height="13" rx="2"/>
             <path d="M9 3h11a2 2 0 012 2v11"/>
           </svg>
+          <span class="btn-key-hint"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></span>
         </button>
       </div>
 
@@ -227,7 +242,7 @@
           <button id="btn-save-later" class="btn-secondary btn-modal-action">Decidir Mais Tarde</button>
           <button id="btn-confirm-group" class="btn-primary btn-modal-action-wide" style="display: none;">Confirmar Selecção</button>
         </div>
-        <p class="group-hint"><kbd>ESC</kbd> cancelar | <kbd>ENTER</kbd> guardar mais tarde / confirmar selecção</p>
+        <p class="group-hint"><kbd>ESC</kbd> voltar a agrupar | <kbd>ENTER</kbd> guardar mais tarde / confirmar selecção</p>
       </div>
       <div id="group-grid"></div>
     </div>

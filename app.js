@@ -122,8 +122,6 @@ async function pickFolder() {
     $('selected-folder').textContent = '📁 ' + state.dirHandle.name;
     $('selected-folder').classList.add('visible');
     $('start-btn').style.display = '';
-    const folderStatsBtn = $('folder-stats-btn');
-    if (folderStatsBtn) folderStatsBtn.style.display = '';
     $('folder-error').textContent = '';
   } catch (err) {
     // User cancelled the dialog — ignore AbortError
@@ -161,6 +159,8 @@ async function startSession() {
 
     // Scan for image files
     const photos = [];
+    state.videoBasenames = new Set();
+    
     for await (const [name, handle] of state.dirHandle.entries()) {
       if (handle.kind !== 'file') continue;
       if (name.startsWith('.')) continue;
@@ -168,6 +168,9 @@ async function startSession() {
       const ext = name.split('.').pop().toLowerCase();
       if (IMAGE_EXTENSIONS.has(ext)) {
         photos.push({ name, handle });
+      } else if (ext === 'mov' || ext === 'mp4') {
+        const basename = name.substring(0, name.lastIndexOf('.')).toLowerCase();
+        state.videoBasenames.add(basename);
       }
     }
 
@@ -175,11 +178,6 @@ async function startSession() {
     photos.sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
     );
-
-    if (photos.length === 0) {
-      $('folder-error').textContent = 'Nenhuma fotografia encontrada nesta pasta';
-      return;
-    }
 
     // Reset state
     state.photos = photos;
@@ -289,6 +287,30 @@ async function computeSimilarity(img1, img2) {
  * Render the current photo and update all UI elements.
  */
 async function renderPhoto() {
+  // Handle empty folder state
+  if (state.photos.length === 0) {
+    $('photo-card').style.display = 'none';
+    $('controls-bar').style.display = 'none';
+    const emptyState = $('empty-folder-state');
+    if (emptyState) emptyState.style.display = 'flex';
+    
+    $('photo-counter').textContent = '0 / 0';
+    $('stat-kept-count').textContent = state.stats.kept || 0;
+    $('stat-trashed-count').textContent = state.stats.trashed || 0;
+    $('stat-grouped-count').textContent = state.stats.grouped || 0;
+    $('progress-fill').style.width = '100%';
+    
+    // Clear any previous previews
+    if ($('next-preview')) $('next-preview').classList.remove('visible');
+    if ($('prev-preview')) $('prev-preview').classList.remove('visible');
+    return;
+  } else {
+    $('photo-card').style.display = '';
+    $('controls-bar').style.display = '';
+    const emptyState = $('empty-folder-state');
+    if (emptyState) emptyState.style.display = 'none';
+  }
+
   // Reached the end?
   if (state.currentIndex >= state.photos.length) {
     if (state.isGrouping && state.group.length > 0) {
@@ -374,6 +396,47 @@ async function renderPhoto() {
 
   // Update text elements
   $('photo-filename').textContent = entry.name;
+
+  // Motion Photo Detection
+  const nameUpper = entry.name.toUpperCase();
+  const basename = entry.name.substring(0, entry.name.lastIndexOf('.')).toLowerCase();
+  
+  let isMotionPhoto = false;
+  
+  // 1. Check for Apple Live Photo sidecar (.mov or .mp4)
+  if (state.videoBasenames && state.videoBasenames.has(basename)) {
+    isMotionPhoto = true;
+  }
+  // 2. Check filename conventions for Google Pixel / Samsung
+  else if (nameUpper.startsWith('MVIMG_') || nameUpper.includes('MP.JPG') || nameUpper.includes('_MP')) {
+    isMotionPhoto = true;
+  }
+  // 3. Fallback: Deep inspection of XMP metadata in first 128KB
+  else {
+    try {
+      const file = await entry.handle.getFile();
+      const slice = file.slice(0, 131072);
+      const buffer = await slice.arrayBuffer();
+      const decoder = new TextDecoder('iso-8859-1'); 
+      const text = decoder.decode(buffer);
+      
+      if (text.includes('GCamera:MotionPhoto="1"') || 
+          text.includes('GCamera:MicroVideo="1"') || 
+          text.includes('MicroVideo>1<') ||
+          text.includes('Item:Mime="video/mp4"')) {
+        isMotionPhoto = true;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const mpIndicator = $('motion-photo-indicator');
+  if (mpIndicator) {
+    if (isMotionPhoto) mpIndicator.classList.add('visible');
+    else mpIndicator.classList.remove('visible');
+  }
+
   $('photo-counter').textContent = (state.currentIndex + 1) + ' / ' + state.photos.length;
   $('stat-kept-count').textContent = state.stats.kept;
   $('stat-trashed-count').textContent = state.stats.trashed;
@@ -926,7 +989,7 @@ async function confirmGroupSelection() {
 }
 
 /**
- * Cancel the group selection — keep all grouped photos.
+ * Cancel the group selection — return to grouping mode.
  */
 async function cancelGroupSelection() {
   cleanupGroupModal();
@@ -940,27 +1003,12 @@ async function cancelGroupSelection() {
     return;
   }
 
-  try {
-    for (const entry of state.group) {
-      await keepFile(entry.handle, entry.name);
-    }
-  } catch (err) {
-    showToast('Erro ao guardar grupo: ' + err.message, 'error');
-    return;
-  }
-
-  state.stats.kept += state.group.length;
+  // Return to grouping mode
+  state.isGrouping = true;
+  updateControlsUI();
+  updateGroupIndicator();
   
-  const groupStartIndex = state.currentIndex - state.group.length;
-  state.undoStack.push({
-    type: 'group',
-    trashed: [],
-    kept: state.group,
-    groupStartIndex: groupStartIndex >= 0 ? groupStartIndex : 0,
-  });
-
-  state.group = [];
-  showToast('Grupo cancelado — todas guardadas', 'info');
+  showToast('De volta ao agrupamento', 'info');
   renderPhoto();
 }
 
@@ -1316,6 +1364,7 @@ function setupSwipeGestures() {
   card.addEventListener('pointermove', (e) => {
     if (!state.isDragging) return;
     state.dragDeltaX = e.clientX - state.dragStartX;
+    if (state.isGrouping) return; // Do not animate swipe in grouping mode
 
     const rotation = state.dragDeltaX * 0.04;
     card.style.transform = 'translateX(' + state.dragDeltaX + 'px) rotate(' + rotation + 'deg)';
@@ -1325,10 +1374,10 @@ function setupSwipeGestures() {
     const trashOv = card.querySelector('.overlay-trash');
 
     if (state.dragDeltaX > 0) {
-      keepOv.style.opacity = Math.min(state.dragDeltaX / 120, 1);
+      keepOv.style.opacity = Math.min(state.dragDeltaX / 300, 1);
       trashOv.style.opacity = '0';
     } else {
-      trashOv.style.opacity = Math.min(-state.dragDeltaX / 120, 1);
+      trashOv.style.opacity = Math.min(-state.dragDeltaX / 300, 1);
       keepOv.style.opacity = '0';
     }
   });
@@ -1348,15 +1397,12 @@ function setupSwipeGestures() {
       return;
     }
 
+    if (state.isGrouping) return; // Swiping is disabled in grouping mode
+
     // Trigger action if dragged past threshold
     const threshold = 120;
-    if (state.isGrouping) {
-      if (state.dragDeltaX > threshold) handleGroup(); // Right -> add to group
-      else if (state.dragDeltaX < -threshold) endGrouping(); // Left -> stop grouping
-    } else {
-      if (state.dragDeltaX > threshold) handleKeep();
-      else if (state.dragDeltaX < -threshold) handleTrash();
-    }
+    if (state.dragDeltaX > threshold) handleKeep();
+    else if (state.dragDeltaX < -threshold) handleTrash();
   });
 
   card.addEventListener('pointercancel', () => {
@@ -1431,6 +1477,19 @@ function setupKeyboardShortcuts() {
     // Swipe screen shortcuts
     if (state.screen === 'swipe') {
       switch (e.key) {
+        case 'Enter':
+          if (state.isGrouping) {
+            e.preventDefault();
+            state.isGrouping = false;
+            updateControlsUI();
+            updateGroupIndicator();
+            if (state.group.length > 0) {
+              saveGroupForLater();
+            } else {
+              renderPhoto();
+            }
+          }
+          break;
         case 'ArrowRight': case 'd': case 'D':
           if (!state.isGrouping) { e.preventDefault(); handleKeep(); } break;
         case 'ArrowLeft': case 'a': case 'A':
@@ -1767,8 +1826,8 @@ function setupEventListeners() {
   // Stats
   const showStats = () => loadStatistics();
   $('btn-stats').addEventListener('click', showStats);
-  const folderStatsBtn = $('folder-stats-btn');
-  if (folderStatsBtn) folderStatsBtn.addEventListener('click', showStats);
+  const emptyStatsBtn = $('empty-stats-btn');
+  if (emptyStatsBtn) emptyStatsBtn.addEventListener('click', showStats);
   if ($('done-stats-btn')) $('done-stats-btn').addEventListener('click', showStats);
   $('stats-back-btn').addEventListener('click', () => {
     $('stats-screen').classList.remove('active');
