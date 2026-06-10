@@ -439,7 +439,8 @@ async function renderPhoto() {
     else mpIndicator.classList.remove('visible');
   }
 
-  $('photo-counter').textContent = (state.currentIndex + 1) + ' / ' + state.photos.length;
+  const remaining = state.photos.length - state.currentIndex;
+  $('photo-counter').textContent = remaining;
   $('stat-kept-count').textContent = state.stats.kept;
   $('stat-trashed-count').textContent = state.stats.trashed;
   $('stat-grouped-count').textContent = state.stats.grouped;
@@ -547,6 +548,8 @@ async function renderPreviews() {
       preview.classList.remove('similar-alert');
     }
   }
+  
+  checkMobileBubblesHelp();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1112,53 +1115,88 @@ async function showGroupsList() {
   
   groups.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
   
-  for (let i = 0; i < groups.length; i++) {
-    const entry = groups[i];
-    const item = document.createElement('div');
-    item.className = 'group-item';
-    item.style.animationDelay = (i * 0.04) + 's';
+  const PAGE_SIZE = 40;
+  let currentPage = 0;
+  
+  async function renderPage() {
+    const start = currentPage * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, groups.length);
+    const pageGroups = groups.slice(start, end);
     
-    let firstFileHandle = null;
-    let photoCount = 0;
-    for await (const [fileName, fileHandle] of entry.handle.entries()) {
-      if (fileHandle.kind === 'file') {
-        photoCount++;
-        if (!firstFileHandle) firstFileHandle = fileHandle;
+    const existingLoadMore = grid.querySelector('.load-more-btn');
+    if (existingLoadMore) existingLoadMore.remove();
+    
+    for (let i = 0; i < pageGroups.length; i++) {
+      const entry = pageGroups[i];
+      const item = document.createElement('div');
+      item.className = 'group-item';
+      item.style.animationDelay = ((i % PAGE_SIZE) * 0.04) + 's';
+      
+      let firstFileHandle = null;
+      let photoCount = 0;
+      for await (const [fileName, fileHandle] of entry.handle.entries()) {
+        if (fileHandle.kind === 'file') {
+          photoCount++;
+          if (!firstFileHandle) firstFileHandle = fileHandle;
+        }
       }
+      
+      if (photoCount === 0) continue; // Skip empty groups
+      
+      const img = document.createElement('img');
+      img.draggable = false;
+      try {
+        if (firstFileHandle) {
+          const url = await createObjectUrl(firstFileHandle);
+          img.src = url;
+          img.dataset.objectUrl = url;
+        }
+      } catch {
+        img.alt = 'Erro';
+      }
+      
+      const label = document.createElement('span');
+      label.className = 'group-item-label';
+      label.textContent = `${entry.name} (${photoCount} fotos)`;
+      
+      item.appendChild(img);
+      item.appendChild(label);
+      
+      item.addEventListener('click', () => {
+        cleanupGroupsListModal();
+        modal.classList.remove('active');
+        openGroupForSelection(entry.handle, entry.name);
+      });
+      
+      grid.appendChild(item);
     }
     
-    if (photoCount === 0) continue; // Skip empty groups
-    
-    const img = document.createElement('img');
-    img.draggable = false;
-    try {
-      if (firstFileHandle) {
-        const url = await createObjectUrl(firstFileHandle);
-        img.src = url;
-        img.dataset.objectUrl = url;
-      }
-    } catch {
-      img.alt = 'Erro';
+    if (end < groups.length) {
+      const loadMoreContainer = document.createElement('div');
+      loadMoreContainer.style.width = '100%';
+      loadMoreContainer.style.display = 'flex';
+      loadMoreContainer.style.justifyContent = 'center';
+      loadMoreContainer.style.marginTop = '20px';
+      
+      const loadMore = document.createElement('button');
+      loadMore.className = 'btn-primary load-more-btn';
+      loadMore.textContent = 'Carregar Mais (' + (groups.length - end) + ' restantes)';
+      loadMore.onclick = async () => {
+        loadMore.textContent = 'A carregar...';
+        loadMore.disabled = true;
+        currentPage++;
+        await renderPage();
+      };
+      
+      loadMoreContainer.appendChild(loadMore);
+      grid.appendChild(loadMoreContainer);
     }
     
-    const label = document.createElement('span');
-    label.className = 'group-item-label';
-    label.textContent = `${entry.name} (${photoCount} fotos)`;
-    
-    item.appendChild(img);
-    item.appendChild(label);
-    
-    item.addEventListener('click', () => {
-      cleanupGroupsListModal();
-      modal.classList.remove('active');
-      openGroupForSelection(entry.handle, entry.name);
-    });
-    
-    grid.appendChild(item);
+    $('photo-loading').classList.add('hidden');
+    modal.classList.add('active');
   }
   
-  $('photo-loading').classList.add('hidden');
-  modal.classList.add('active');
+  await renderPage();
 }
 
 function cleanupGroupsListModal() {
@@ -1203,10 +1241,15 @@ async function showGallery(type) {
     title.textContent = 'Guardadas';
     desc.textContent = `Fotos movidas para _kept (${state.stats.kept})`;
     sourceHandle = state.keptHandle;
-  } else {
+  } else if (type === 'trashed') {
     title.textContent = 'Apagadas';
     desc.textContent = `Fotos movidas para _trash (${state.stats.trashed})`;
     sourceHandle = state.trashHandle;
+  } else if (type === 'remaining') {
+    const remaining = state.photos.length - state.currentIndex;
+    title.textContent = 'Restantes';
+    desc.textContent = `Ainda faltam analisar ${remaining} foto(s).`;
+    sourceHandle = 'fake'; // Pass validation
   }
   
   if (!sourceHandle) {
@@ -1217,75 +1260,117 @@ async function showGallery(type) {
   $('photo-loading').classList.remove('hidden');
   
   const files = [];
-  try {
-    for await (const [name, handle] of sourceHandle.entries()) {
-      if (handle.kind === 'file') files.push({ name, handle });
+  if (type === 'remaining') {
+    for (let i = state.currentIndex; i < state.photos.length; i++) {
+      files.push({ name: state.photos[i].handle.name, handle: state.photos[i].handle });
     }
-  } catch (err) {
-    showToast('Erro ao ler pasta: ' + err.message, 'error');
+  } else {
+    try {
+      for await (const [name, handle] of sourceHandle.entries()) {
+        if (handle.kind === 'file') files.push({ name, handle });
+      }
+    } catch (err) {
+      showToast('Erro ao ler pasta: ' + err.message, 'error');
+    }
+    files.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
   }
   
-  files.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
+  const PAGE_SIZE = 40;
+  let currentPage = 0;
   
-  for (let i = 0; i < files.length; i++) {
-    const entry = files[i];
-    const item = document.createElement('div');
-    item.className = 'group-item';
-    item.style.animationDelay = (i * 0.04) + 's';
+  async function renderPage() {
+    const start = currentPage * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, files.length);
+    const pageFiles = files.slice(start, end);
     
-    const img = document.createElement('img');
-    try {
-      const url = await createObjectUrl(entry.handle);
-      img.src = url;
-      img.dataset.objectUrl = url;
-    } catch {
-      img.alt = 'Erro';
-    }
+    const existingLoadMore = grid.querySelector('.load-more-btn');
+    if (existingLoadMore) existingLoadMore.remove();
     
-    const indicator = document.createElement('div');
-    indicator.className = 'group-select-indicator';
-    indicator.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>';
-
-    const fsBtn = document.createElement('div');
-    fsBtn.className = 'group-fullscreen-btn';
-    fsBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
-    fsBtn.title = "Ver em ecrã inteiro";
-    fsBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openFullscreen(img.dataset.objectUrl);
-    });
-
-    const label = document.createElement('span');
-    label.className = 'group-item-label';
-    label.textContent = entry.name;
-    
-    item.appendChild(img);
-    item.appendChild(fsBtn);
-    item.appendChild(indicator);
-    item.appendChild(label);
-    grid.appendChild(item);
-
-    // Toggle selection on click
-    item.addEventListener('click', () => {
-      if (state.gallerySelected.has(entry.name)) {
-        state.gallerySelected.delete(entry.name);
-        item.classList.remove('selected');
-      } else {
-        state.gallerySelected.add(entry.name);
-        item.classList.add('selected');
+    for (let i = 0; i < pageFiles.length; i++) {
+      const entry = pageFiles[i];
+      const item = document.createElement('div');
+      item.className = 'group-item';
+      item.style.animationDelay = ((i % PAGE_SIZE) * 0.04) + 's';
+      
+      const img = document.createElement('img');
+      try {
+        const url = await createObjectUrl(entry.handle);
+        img.src = url;
+        img.dataset.objectUrl = url;
+      } catch {
+        img.alt = 'Erro';
       }
       
-      if (state.gallerySelected.size > 0) {
-        restoreBtn.style.display = 'inline-flex';
-        restoreBtn.textContent = `Restaurar ${state.gallerySelected.size} foto(s)`;
-      } else {
-        restoreBtn.style.display = 'none';
+      const indicator = document.createElement('div');
+      indicator.className = 'group-select-indicator';
+      indicator.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>';
+
+      const fsBtn = document.createElement('div');
+      fsBtn.className = 'group-fullscreen-btn';
+      fsBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+      fsBtn.title = "Ver em ecrã inteiro";
+      fsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openFullscreen(img.dataset.objectUrl);
+      });
+
+      const label = document.createElement('span');
+      label.className = 'group-item-label';
+      label.textContent = entry.name;
+      
+      item.appendChild(img);
+      item.appendChild(fsBtn);
+      item.appendChild(indicator);
+      item.appendChild(label);
+      grid.appendChild(item);
+
+      // Toggle selection on click (disabled for remaining photos)
+      if (type !== 'remaining') {
+        item.addEventListener('click', () => {
+          if (state.gallerySelected.has(entry.name)) {
+            state.gallerySelected.delete(entry.name);
+            item.classList.remove('selected');
+          } else {
+            state.gallerySelected.add(entry.name);
+            item.classList.add('selected');
+          }
+          
+          if (state.gallerySelected.size > 0) {
+            restoreBtn.style.display = 'inline-flex';
+            restoreBtn.textContent = `Restaurar ${state.gallerySelected.size} foto(s)`;
+          } else {
+            restoreBtn.style.display = 'none';
+          }
+        });
       }
-    });
+    }
+    
+    if (end < files.length) {
+      const loadMoreContainer = document.createElement('div');
+      loadMoreContainer.style.width = '100%';
+      loadMoreContainer.style.display = 'flex';
+      loadMoreContainer.style.justifyContent = 'center';
+      loadMoreContainer.style.marginTop = '20px';
+      
+      const loadMore = document.createElement('button');
+      loadMore.className = 'btn-primary load-more-btn';
+      loadMore.textContent = 'Carregar Mais (' + (files.length - end) + ' restantes)';
+      loadMore.onclick = async () => {
+        loadMore.textContent = 'A carregar...';
+        loadMore.disabled = true;
+        currentPage++;
+        await renderPage();
+      };
+      
+      loadMoreContainer.appendChild(loadMore);
+      grid.appendChild(loadMoreContainer);
+    }
+    
+    $('photo-loading').classList.add('hidden');
+    modal.classList.add('active');
   }
   
-  $('photo-loading').classList.add('hidden');
-  modal.classList.add('active');
+  await renderPage();
 }
 
 function cleanupGalleryModal() {
@@ -1508,22 +1593,6 @@ function setupKeyboardShortcuts() {
     // Swipe screen shortcuts
     if (state.screen === 'swipe') {
       switch (e.key) {
-        case 'Enter':
-          if (state.isGrouping) {
-            e.preventDefault();
-            flashButton('btn-stop-group');
-            setTimeout(() => {
-              state.isGrouping = false;
-              updateControlsUI();
-              updateGroupIndicator();
-              if (state.group.length > 0) {
-                saveGroupForLater();
-              } else {
-                renderPhoto();
-              }
-            }, 100);
-          }
-          break;
         case 'ArrowRight': case 'd': case 'D':
           if (!state.isGrouping) {
             e.preventDefault();
@@ -1548,10 +1617,23 @@ function setupKeyboardShortcuts() {
           flashButton('btn-undo');
           handleUndo();
           break;
-        case 'ArrowUp':
+        case 'ArrowUp': case 'w': case 'W':
           e.preventDefault();
-          if (state.isGrouping) endGrouping();
-          else toggleFullscreen();
+          if (state.isGrouping) {
+            flashButton('btn-stop-group');
+            setTimeout(() => {
+              state.isGrouping = false;
+              updateControlsUI();
+              updateGroupIndicator();
+              if (state.group.length > 0) {
+                saveGroupForLater();
+              } else {
+                renderPhoto();
+              }
+            }, 100);
+          } else {
+            toggleFullscreen();
+          }
           break;
       }
     }
@@ -1772,6 +1854,7 @@ function setupEventListeners() {
   setupFullscreenZoomPan($('fullscreen-photo'));
 
   // Gallery and Groups
+  $('photo-counter').addEventListener('click', () => showGallery('remaining'));
   $('stat-kept').addEventListener('click', () => showGallery('kept'));
   $('stat-trashed').addEventListener('click', () => showGallery('trashed'));
   $('btn-restore-gallery').addEventListener('click', restoreGallerySelection);
@@ -2286,6 +2369,29 @@ function renderHeatmap(gpsPoints, fitMapBounds = false) {
     state._ignoreMapEvents = true;
     state.leafletMap.setView([20, 0], 2);
     setTimeout(() => { state._ignoreMapEvents = false; }, 800);
+    setTimeout(() => { state._ignoreMapEvents = false; }, 800);
+  }
+}
+
+/**
+ * Mostra o tooltip explicativo no mobile na primeira vez
+ */
+function checkMobileBubblesHelp() {
+  if (window.innerWidth <= 768 && !localStorage.getItem('fotobumble_mobile_bubbles_seen')) {
+    localStorage.setItem('fotobumble_mobile_bubbles_seen', 'true');
+    const help = document.createElement('div');
+    help.className = 'mobile-bubbles-tooltip';
+    help.innerHTML = `
+      <div class="tooltip-text">👇 Foto Anterior (Esq.)</div>
+      <div class="tooltip-text">Próxima Foto (Dir.) 👇</div>
+    `;
+    document.body.appendChild(help);
+    
+    // Animate out after 5 seconds
+    setTimeout(() => {
+      help.style.opacity = '0';
+      setTimeout(() => help.remove(), 500);
+    }, 5000);
   }
 }
 
