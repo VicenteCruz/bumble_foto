@@ -1334,7 +1334,11 @@ function animateExit(direction) {
     overlay.style.opacity = '1';
 
     // Start exit after a short overlay flash
-    setTimeout(() => card.classList.add('exit-' + direction), 120);
+    setTimeout(() => {
+      card.style.transition = '';
+      card.style.transform = ''; // clear inline transform so class can take over
+      card.classList.add('exit-' + direction);
+    }, 120);
 
     // Resolve after animation finishes
     setTimeout(() => {
@@ -1386,23 +1390,38 @@ function setupSwipeGestures() {
     if (!state.isDragging) return;
     state.isDragging = false;
 
-    card.style.transition = '';
-    card.style.transform = '';
-    card.querySelector('.overlay-keep').style.opacity = '0';
-    card.querySelector('.overlay-trash').style.opacity = '0';
-
     // Click without drag triggers fullscreen
     if (Math.abs(state.dragDeltaX) < 5) {
+      card.style.transition = '';
+      card.style.transform = '';
+      card.querySelector('.overlay-keep').style.opacity = '0';
+      card.querySelector('.overlay-trash').style.opacity = '0';
       toggleFullscreen();
       return;
     }
 
-    if (state.isGrouping) return; // Swiping is disabled in grouping mode
+    if (state.isGrouping) {
+      // Swiping is disabled in grouping mode, snap back smoothly
+      card.style.transition = 'transform 0.3s ease-out';
+      card.style.transform = '';
+      card.querySelector('.overlay-keep').style.opacity = '0';
+      card.querySelector('.overlay-trash').style.opacity = '0';
+      return;
+    }
 
     // Trigger action if dragged past threshold
     const threshold = 120;
-    if (state.dragDeltaX > threshold) handleKeep();
-    else if (state.dragDeltaX < -threshold) handleTrash();
+    if (state.dragDeltaX > threshold) {
+      handleKeep();
+    } else if (state.dragDeltaX < -threshold) {
+      handleTrash();
+    } else {
+      // Snap back smoothly if not dragged past threshold
+      card.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
+      card.style.transform = '';
+      card.querySelector('.overlay-keep').style.opacity = '0';
+      card.querySelector('.overlay-trash').style.opacity = '0';
+    }
   });
 
   card.addEventListener('pointercancel', () => {
