@@ -453,10 +453,16 @@ async function renderPhoto() {
 
   // Card entrance animation
   const card = $('photo-card');
+  card.style.transition = 'none'; // Prevent animating the setup from exit position
   card.classList.remove('exit-left', 'exit-right', 'exit-group');
   card.classList.add('entering');
+  
+  // Force a reflow so the transition="none" and entering class are applied instantly
+  void card.offsetWidth;
+  
+  card.style.transition = '';
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => card.classList.remove('entering'));
+    card.classList.remove('entering');
   });
 }
 
@@ -506,12 +512,18 @@ async function renderPreviews() {
       try {
         const url = await createObjectUrl(state.photos[nextIdx].handle);
         state.nextObjectUrl = url;
+        
+        // Temporarily hide to trigger fade-in for the new photo
+        preview.classList.remove('visible');
         preview.classList.remove('similar-alert');
         
         const nextImg = $('next-photo');
         nextImg.src = url;
         $('side-photo').src = url; // Update side-by-side
-        preview.classList.add('visible');
+        
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => preview.classList.add('visible'));
+        });
 
         // Detect similarity once next image loads
         nextImg.onload = async () => {
