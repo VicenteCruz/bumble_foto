@@ -18,20 +18,26 @@
          FOLDER SELECTION SCREEN
          ════════════════════════════════════════════ -->
     <div id="folder-screen" class="screen active">
+      <!-- Minimalist Relevo Background Shapes -->
+      <div id="bg-shapes">
+        <div class="bg-shape shape-1"></div>
+        <div class="bg-shape shape-2"></div>
+        <div class="bg-shape shape-3"></div>
+      </div>
       <div class="folder-card">
         <!-- Logo -->
         <div class="logo-section">
           <div class="logo-icon">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
               <!-- Left background card -->
-              <rect x="6" y="10" width="22" height="28" rx="3" stroke="#71717A" stroke-width="2" transform="rotate(-12 17 24)"/>
+              <rect x="6" y="10" width="22" height="28" rx="3" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" transform="rotate(-12 17 24)"/>
               <!-- Right background card -->
-              <rect x="20" y="10" width="22" height="28" rx="3" stroke="#A1A1AA" stroke-width="2" transform="rotate(12 31 24)"/>
+              <rect x="20" y="10" width="22" height="28" rx="3" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" transform="rotate(12 31 24)"/>
               <!-- Center main card -->
-              <rect x="12" y="6" width="24" height="36" rx="4" fill="#111111" stroke="#FFFFFF" stroke-width="2.5"/>
+              <rect x="12" y="6" width="24" height="36" rx="4" fill="#0A0A0C" stroke="rgba(255,255,255,0.9)" stroke-width="1.5"/>
               <!-- Simple landscape abstract in center card -->
-              <circle cx="24" cy="18" r="3.5" stroke="#FFFFFF" stroke-width="2"/>
-              <path d="M12 30 L18 24 L28 32" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="24" cy="18" r="3" fill="#FFCC00" />
+              <path d="M12 30 L18 24 L28 32" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
           <h1 class="logo-title">Fotobumble</h1>
@@ -233,6 +239,9 @@
          GROUP SELECTION MODAL
          ════════════════════════════════════════════ -->
     <div id="group-modal">
+      <div class="modal-close-btn" id="group-modal-close">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </div>
       <div class="group-header">
         <h2>Escolhe as fotos para guardar</h2>
         <p>Clica nas fotos que queres manter. As restantes serão apagadas.</p>
@@ -241,7 +250,7 @@
           <button id="btn-save-later" class="btn-secondary btn-modal-action">Decidir Mais Tarde</button>
           <button id="btn-confirm-group" class="btn-primary btn-modal-action-wide" style="display: none;">Confirmar Selecção</button>
         </div>
-        <p class="group-hint"><kbd>ESC</kbd> voltar a agrupar | <kbd>ENTER</kbd> guardar mais tarde / confirmar selecção</p>
+        <p class="group-hint"><kbd>ESC</kbd> voltar a agrupar | <kbd>ENTER</kbd> <span id="enter-hint-text">guardar mais tarde</span></p>
       </div>
       <div id="group-grid"></div>
     </div>

@@ -838,6 +838,10 @@ async function renderGroupGrid() {
       if (btnConfirm) {
         btnConfirm.style.display = state.selectedPhotos.size > 0 ? 'inline-flex' : 'none';
       }
+      const hintSpan = $('enter-hint-text');
+      if (hintSpan) {
+        hintSpan.textContent = state.selectedPhotos.size > 0 ? 'confirmar selecção' : 'guardar mais tarde';
+      }
     });
     grid.appendChild(item);
   }
@@ -848,6 +852,8 @@ async function renderGroupGrid() {
  */
 async function showGroupModal() {
   state.selectedPhotos = new Set(); // Reset selection
+  const hintSpan = $('enter-hint-text');
+  if (hintSpan) hintSpan.textContent = 'guardar mais tarde';
   cleanupGroupModal(); // clean just in case
   const modal = $('group-modal');
   await renderGroupGrid();
@@ -1878,10 +1884,14 @@ function setupEventListeners() {
   // Modal close buttons (moved from inline onclick in HTML)
   document.querySelectorAll('.modal-close-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const modal = btn.closest('#gallery-modal, #groups-list-modal');
+      const modal = btn.closest('#gallery-modal, #groups-list-modal, #group-modal');
       if (modal) {
         if (modal.id === 'gallery-modal') cleanupGalleryModal();
         if (modal.id === 'groups-list-modal') cleanupGroupsListModal();
+        if (modal.id === 'group-modal') {
+          state.isGrouping = true; // resume grouping
+          updateControlsUI();
+        }
         modal.classList.remove('active');
       }
     });
