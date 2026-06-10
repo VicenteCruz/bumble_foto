@@ -23,15 +23,15 @@
         <div class="logo-section">
           <div class="logo-icon">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <rect x="4" y="8" width="28" height="28" rx="6" stroke="url(#logo-grad)" stroke-width="2.5"/>
-              <rect x="16" y="12" width="28" height="28" rx="6" stroke="url(#logo-grad)" stroke-width="2.5" fill="rgba(0,224,158,0.08)"/>
-              <circle cx="30" cy="26" r="5" stroke="url(#logo-grad)" stroke-width="2"/>
-              <defs>
-                <linearGradient id="logo-grad" x1="0" y1="0" x2="48" y2="48">
-                  <stop offset="0%" stop-color="#00e09e"/>
-                  <stop offset="100%" stop-color="#818cf8"/>
-                </linearGradient>
-              </defs>
+              <!-- Left background card -->
+              <rect x="6" y="10" width="22" height="28" rx="3" stroke="#71717A" stroke-width="2" transform="rotate(-12 17 24)"/>
+              <!-- Right background card -->
+              <rect x="20" y="10" width="22" height="28" rx="3" stroke="#A1A1AA" stroke-width="2" transform="rotate(12 31 24)"/>
+              <!-- Center main card -->
+              <rect x="12" y="6" width="24" height="36" rx="4" fill="#111111" stroke="#FFFFFF" stroke-width="2.5"/>
+              <!-- Simple landscape abstract in center card -->
+              <circle cx="24" cy="18" r="3.5" stroke="#FFFFFF" stroke-width="2"/>
+              <path d="M12 30 L18 24 L28 32" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
           <h1 class="logo-title">Fotobumble</h1>
@@ -226,7 +226,6 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 20V10M12 20V4M6 20v-6"/>
         </svg>
-        <span>Estatísticas</span>
       </div>
     </div>
 
@@ -442,6 +441,105 @@
         </div>
       </div>
     </div>
+
+    <!-- ════════════════════════════════════════════
+         HELP MODAL & CAROUSEL
+         ════════════════════════════════════════════ -->
+    <div id="help-modal" class="help-modal-overlay hidden">
+      <div class="help-modal-content">
+        <button id="btn-close-help" class="btn-close-help" title="Fechar">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+
+        <div class="help-carousel-viewport">
+          <div id="help-carousel-track" class="help-carousel-track">
+            
+            <!-- Slide 1: Welcome & Basics -->
+            <div class="help-slide">
+              <div class="help-icon-wrapper">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <path d="M2 15h10"/><path d="m9 18 3-3-3-3"/>
+                </svg>
+              </div>
+              <h2>Bem-vindo ao Fotobumble</h2>
+              <p>Desliza rapidamente pelas tuas fotos como se estivesses numa app de encontros.</p>
+              <div class="help-shortcuts-grid">
+                <div class="help-shortcut-item">
+                  <span class="help-key">←</span> ou <span class="help-key">A</span>
+                  <span>Apagar Foto</span>
+                </div>
+                <div class="help-shortcut-item">
+                  <span class="help-key">→</span> ou <span class="help-key">D</span>
+                  <span>Guardar Foto</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slide 2: Grouping -->
+            <div class="help-slide">
+              <div class="help-icon-wrapper">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent-group)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="7" width="13" height="13" rx="2"/><path d="M9 3h11a2 2 0 012 2v11"/>
+                </svg>
+              </div>
+              <h2>O que é o Agrupamento?</h2>
+              <p>Tiraste 10 fotos da mesma pose para garantir que não havia olhos fechados? Em vez de decidires agora, agrupa-as para analisar mais tarde.</p>
+              <div class="help-shortcuts-grid">
+                <div class="help-shortcut-item">
+                  <span class="help-key">↓</span>
+                  <span>Agrupar (Adicionar ao grupo)</span>
+                </div>
+                <div class="help-shortcut-item">
+                  <span class="help-key">Enter</span>
+                  <span>Concluir Grupo</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Slide 3: Smart Suggestions -->
+            <div class="help-slide">
+              <div class="help-icon-wrapper">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent-undo)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <h2>Sugestões Inteligentes</h2>
+              <p>O Fotobumble deteta magicamente se várias fotos foram tiradas nos mesmos segundos.</p>
+              <p>Quando vires a barra <strong>"Fotografia em série"</strong>, significa que deverás considerar agrupar essas fotos usando a tecla <span class="help-key">↓</span>.</p>
+            </div>
+
+            <!-- Slide 4: Finalizing -->
+            <div class="help-slide">
+              <div class="help-icon-wrapper">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent-keep)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <h2>As tuas Galerias</h2>
+              <p>A qualquer momento podes ver as tuas galerias com os <strong>Grupos</strong>, ou com as fotografias <strong>Guardadas</strong> e <strong>Apagadas</strong>.</p>
+              <p>Basta clicares nas contagens correspondentes na barra superior!</p>
+              <button id="btn-help-finish" class="btn-primary" style="margin-top: 24px; width: fit-content;">Começar a Usar!</button>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="help-carousel-controls">
+          <button id="btn-help-prev" class="btn-help-nav" disabled>Anterior</button>
+          <div id="help-carousel-dots" class="help-carousel-dots">
+            <div class="help-dot active"></div>
+            <div class="help-dot"></div>
+            <div class="help-dot"></div>
+            <div class="help-dot"></div>
+          </div>
+          <button id="btn-help-next" class="btn-help-nav">Próximo</button>
+        </div>
+      </div>
+    </div>
+
+    <button id="btn-open-help" class="btn-help-floating" title="Ajuda">?</button>
 
   </div>
 

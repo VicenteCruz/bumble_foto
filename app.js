@@ -84,6 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   setupKeyboardShortcuts();
   setupSwipeGestures();
+  setupButtonSpotlight();
+  setupHelpCarousel();
 });
 
 /**
@@ -1345,19 +1347,17 @@ function animateExit(direction) {
     const overlay = card.querySelector(overlaySelector);
     overlay.style.opacity = '1';
 
-    // Start exit after a short overlay flash
-    setTimeout(() => {
-      card.style.transition = '';
-      card.style.transform = ''; // clear inline transform so class can take over
-      card.classList.add('exit-' + direction);
-    }, 120);
+    // Start exit immediately to preserve swipe momentum
+    card.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
+    card.style.transform = ''; // clear inline transform so class can take over
+    card.classList.add('exit-' + direction);
 
     // Resolve after animation finishes
     setTimeout(() => {
       overlay.style.opacity = '0';
       state.isAnimating = false;
       resolve();
-    }, 450);
+    }, 220);
   });
 }
 
@@ -1511,24 +1511,43 @@ function setupKeyboardShortcuts() {
         case 'Enter':
           if (state.isGrouping) {
             e.preventDefault();
-            state.isGrouping = false;
-            updateControlsUI();
-            updateGroupIndicator();
-            if (state.group.length > 0) {
-              saveGroupForLater();
-            } else {
-              renderPhoto();
-            }
+            flashButton('btn-stop-group');
+            setTimeout(() => {
+              state.isGrouping = false;
+              updateControlsUI();
+              updateGroupIndicator();
+              if (state.group.length > 0) {
+                saveGroupForLater();
+              } else {
+                renderPhoto();
+              }
+            }, 100);
           }
           break;
         case 'ArrowRight': case 'd': case 'D':
-          if (!state.isGrouping) { e.preventDefault(); handleKeep(); } break;
+          if (!state.isGrouping) {
+            e.preventDefault();
+            flashButton('btn-keep');
+            handleKeep();
+          }
+          break;
         case 'ArrowLeft': case 'a': case 'A':
-          if (!state.isGrouping) { e.preventDefault(); handleTrash(); } break;
+          if (!state.isGrouping) {
+            e.preventDefault();
+            flashButton('btn-trash');
+            handleTrash();
+          }
+          break;
         case 'ArrowDown': case 'm': case 'M':
-          e.preventDefault(); handleGroup(); break;
+          e.preventDefault();
+          flashButton(state.isGrouping ? 'btn-continue-group' : 'btn-group');
+          handleGroup();
+          break;
         case 'z': case 'Z':
-          e.preventDefault(); handleUndo(); break;
+          e.preventDefault();
+          flashButton('btn-undo');
+          handleUndo();
+          break;
         case 'ArrowUp':
           e.preventDefault();
           if (state.isGrouping) endGrouping();
@@ -1570,6 +1589,14 @@ function openFullscreen(url) {
 // ═══════════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════════
+
+function flashButton(btnId) {
+  const btn = $(btnId);
+  if (btn && !btn.classList.contains('hidden')) {
+    btn.classList.add('keyboard-active');
+    setTimeout(() => btn.classList.remove('keyboard-active'), 150);
+  }
+}
 
 /**
  * Show a toast notification.
@@ -2259,5 +2286,100 @@ function renderHeatmap(gpsPoints, fitMapBounds = false) {
     state._ignoreMapEvents = true;
     state.leafletMap.setView([20, 0], 2);
     setTimeout(() => { state._ignoreMapEvents = false; }, 800);
+  }
+}
+
+/**
+ * Setup mousemove listeners for spotlight hover effect on buttons.
+ */
+function setupButtonSpotlight() {
+  const buttons = document.querySelectorAll('.ctrl-btn, .btn-primary, .btn-secondary, .btn-danger, .btn-modal-action, .btn-modal-action-wide, .btn-stats-swipe, .stat');
+  
+  buttons.forEach(btn => {
+    btn.addEventListener('mousemove', (e) => {
+      const rect = btn.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      btn.style.setProperty('--spot-x', `${x}px`);
+      btn.style.setProperty('--spot-y', `${y}px`);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELP CAROUSEL
+// ═══════════════════════════════════════════════════════════════
+
+function setupHelpCarousel() {
+  const btnOpenHelp = document.getElementById('btn-open-help'); // fallback if needed
+  const btnCloseHelp = document.getElementById('btn-close-help');
+  const btnFinishHelp = document.getElementById('btn-help-finish');
+  const modal = document.getElementById('help-modal');
+  const track = document.getElementById('help-carousel-track');
+  const btnPrev = document.getElementById('btn-help-prev');
+  const btnNext = document.getElementById('btn-help-next');
+  const dots = document.querySelectorAll('.help-dot');
+  
+  if (!modal || !track) return;
+
+  let currentSlide = 0;
+  const totalSlides = 4;
+
+  function updateCarousel() {
+    // Move track
+    track.style.transform = `translateX(-${currentSlide * 25}%)`;
+    
+    // Update dots
+    dots.forEach((dot, index) => {
+      dot.classList.toggle('active', index === currentSlide);
+    });
+    
+    // Update buttons
+    btnPrev.disabled = currentSlide === 0;
+    if (currentSlide === totalSlides - 1) {
+      btnNext.style.display = 'none';
+    } else {
+      btnNext.style.display = 'block';
+    }
+  }
+
+  function openHelp() {
+    modal.classList.remove('hidden');
+    currentSlide = 0;
+    updateCarousel();
+  }
+
+  function closeHelp() {
+    modal.classList.add('hidden');
+    // Mark as seen
+    localStorage.setItem('fotobumble_help_seen', 'true');
+  }
+
+  // Event Listeners
+  if (btnOpenHelp) btnOpenHelp.addEventListener('click', openHelp);
+  if (btnCloseHelp) btnCloseHelp.addEventListener('click', closeHelp);
+  if (btnFinishHelp) btnFinishHelp.addEventListener('click', closeHelp);
+
+  if (btnPrev) {
+    btnPrev.addEventListener('click', () => {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateCarousel();
+      }
+    });
+  }
+
+  if (btnNext) {
+    btnNext.addEventListener('click', () => {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateCarousel();
+      }
+    });
+  }
+
+  // Auto-open on first launch
+  if (!localStorage.getItem('fotobumble_help_seen')) {
+    openHelp();
   }
 }
